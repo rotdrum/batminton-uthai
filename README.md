@@ -77,7 +77,8 @@ bat-uthai/
 ├── BUSINESS-FLOW.md           # กติกาธุรกิจและ flow ส่งต่อทีมพัฒนา
 └── output/
     ├── presentation/          # PowerPoint เสนอขาย
-    └── pdf/                   # PDF เสนอขาย
+    ├── pdf/                   # PDF เสนอขาย
+    └── testing/               # Excel รายการและผลทดสอบระบบ
 ```
 
 ## Backend และ Real-time
@@ -93,6 +94,13 @@ bat-uthai/
 
 หากต้องการเริ่มข้อมูลใหม่ ให้หยุด Server สำรอง `data/state.json` ไว้ก่อน แล้วค่อยลบไฟล์ดังกล่าว เมื่อเปิด Server อีกครั้งระบบจะสร้างข้อมูลจาก Seed
 
+### ความปลอดภัยของข้อมูลใน Git
+
+- `data/seed.json` commit ได้ เพราะเก็บเฉพาะ Master Data เริ่มต้นและไม่มีสมาชิกหรือธุรกรรม
+- `data/state.json` และไฟล์ชั่วคราวถูกระบุใน `.gitignore` แล้ว เพราะอาจมีชื่อสมาชิก ยอดเงิน และหลักฐานการใช้งานจริง
+- ห้ามใช้ `git add -f data/state.json` และไม่ควรนำไฟล์ State จริงไปใส่ใน Issue, Pull Request หรือไฟล์นำเสนอ
+- ก่อนอัปเดตระบบบน Server ให้สำรอง `data/state.json` ไว้นอก repo เสมอ
+
 ## ตรวจสอบ
 
 ```bash
@@ -100,6 +108,8 @@ pnpm check
 ```
 
 คำสั่งนี้ตรวจ Syntax ของ Frontend และทดสอบ Seed, Migration, HTTP, WebSocket, การ Broadcast, Persistence และสมาชิกที่ไม่มีเบอร์โทร
+
+ผลทดสอบระบบแบบ Manual + Automated ล่าสุดอยู่ที่ `output/testing/uthai-smash-system-test-cases.xlsx` ภายในไฟล์มี Summary, รายการทดสอบ 45 เคส, ผลจริง และช่องว่างที่ยังต้องทดสอบต่อ
 
 ## นำขึ้น Server
 
