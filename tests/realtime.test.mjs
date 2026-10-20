@@ -81,6 +81,10 @@ test("serves the app, persists state, and broadcasts updates", async () => {
     const seedSnapshot = await first.next("state:snapshot");
     assert.equal(seedSnapshot.revision, 0);
     assert.equal(seedSnapshot.data.state.courts.length, 4);
+    assert.equal(seedSnapshot.data.state.members.length, 0);
+    assert.equal(seedSnapshot.data.state.queues.length, 0);
+    assert.equal(seedSnapshot.data.state.ballRounds.length, 0);
+    assert.equal(seedSnapshot.data.state.purchases.length, 0);
     const firstSnapshotPromise = first.next("state:snapshot");
     first.socket.send(JSON.stringify({ type: "state:update", data: initialSnapshot }));
     const firstSnapshot = await firstSnapshotPromise;

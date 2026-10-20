@@ -11,9 +11,6 @@ const pathView = [...routeSegments].reverse().map((segment) => ({ board: "board"
 const requestedView = routeParams.get("view") || pathView;
 const requestedAdminTab = routeParams.get("tab");
 const requestedBoardQueueCount = Number(routeParams.get("queues"));
-const CROWD_NAMES = ["วิน", "เก่ง", "นิว", "เจมส์", "โอ๊ต", "ฟิล์ม", "บีม", "มอส", "กาย", "ไนท์", "ปอนด์", "โอม", "แทน", "ท็อป", "อาร์ม", "ฟ้า", "ขิม", "ปุ้ย", "แพรว", "มุก", "จูน", "กิ๊ฟ", "เตย", "ไหม", "โจ", "แบงค์", "เอิร์ธ", "วุฒิ", "ซัน", "เบส", "คิม", "เกมส์"];
-const PEAK_NAMES = ["เต้", "มาร์ค", "นนท์", "โอ๊ค", "อาร์ต", "นัทตี้", "โบ๊ท", "ไนซ์", "กุ้ง", "แนน", "พลอย", "แป๋ม", "ป๊อป", "บอย", "โดม", "ตั้ม", "แก้ม", "อิง", "แพท", "เฟิร์ส", "ริว", "วาว", "แตง", "มิ้ว", "เจี๊ยบ", "ฝน", "จอย", "ออม", "กอล์ฟ", "บิว", "ฮอลล์", "ธาม", "ก้อง", "หมิว", "อ้น", "ปริม", "เจน", "มิกซ์", "พิม", "กร"];
-const BOARD_AVAILABLE_IDS = [10, 22, 87, 88, 89, 90, 91, 92, 93, 94];
 
 const state = {
   view: ["board", "mobile", "admin"].includes(requestedView) ? requestedView : "board",
@@ -27,62 +24,15 @@ const state = {
   currentPlayerId: null,
   selectedPlayers: [],
   lastSync: new Date(),
-  members: [
-    { id: 1, name: "นัท อุทัย", short: "นัท", initials: "NU", level: "N", membership: "club", checkedIn: true, phone: "089-214-5581", previousDue: 0 },
-    { id: 2, name: "ฝ้าย สุพรรณ", short: "ฝ้าย", initials: "FS", level: "N", membership: "guest", checkedIn: true, phone: "081-920-1442", previousDue: 0 },
-    { id: 3, name: "บอส ทัพทัน", short: "บอส", initials: "BT", level: "S", membership: "club", checkedIn: true, phone: "094-552-1130", previousDue: 0 },
-    { id: 4, name: "เมย์ หนองฉาง", short: "เมย์", initials: "MN", level: "N", membership: "guest", checkedIn: true, phone: "086-430-7724", previousDue: 0 },
-    { id: 5, name: "ต้น ลานสัก", short: "ต้น", initials: "TL", level: "S", membership: "club", checkedIn: true, phone: "095-332-8140", previousDue: 0 },
-    { id: 6, name: "ออย เมืองอุทัย", short: "ออย", initials: "OM", level: "N", membership: "guest", checkedIn: true, phone: "063-941-2208", previousDue: 0 },
-    { id: 7, name: "โจ้ บ้านไร่", short: "โจ้", initials: "JB", level: "N", membership: "club", checkedIn: true, phone: "098-624-7750", previousDue: 0 },
-    { id: 8, name: "แป้ง สว่างอารมณ์", short: "แป้ง", initials: "PS", level: "BG", membership: "guest", checkedIn: true, phone: "065-309-1158", previousDue: 0 },
-    { id: 9, name: "ก้อง ห้วยคต", short: "ก้อง", initials: "KH", level: "S", membership: "club", checkedIn: false, phone: "082-336-7021", previousDue: 47.5 },
-    { id: 10, name: "แอม ทัพทัน", short: "แอม", initials: "AT", level: "BG", membership: "guest", checkedIn: true, phone: "090-771-9034", previousDue: 0 },
-    { id: 11, name: "พีท เมืองอุทัย", short: "พีท", initials: "PM", level: "N", membership: "club", checkedIn: true, phone: "091-482-3065", previousDue: 0 },
-    { id: 12, name: "มิ้นท์ หนองขาหย่าง", short: "มิ้นท์", initials: "MK", level: "N", membership: "guest", checkedIn: true, phone: "092-118-6720", previousDue: 0 },
-    { id: 13, name: "กอล์ฟ ลานสัก", short: "กอล์ฟ", initials: "GL", level: "S", membership: "club", checkedIn: true, phone: "081-458-7832", previousDue: 0 },
-    { id: 14, name: "เฟิร์น สว่างอารมณ์", short: "เฟิร์น", initials: "FS", level: "N", membership: "guest", checkedIn: true, phone: "063-442-9158", previousDue: 0 },
-    { id: 15, name: "บอล บ้านไร่", short: "บอล", initials: "BB", level: "N", membership: "guest", checkedIn: true, phone: "095-117-8246", previousDue: 0 },
-    { id: 16, name: "น้ำ หนองฉาง", short: "น้ำ", initials: "NN", level: "BG", membership: "club", checkedIn: true, phone: "091-660-2384", previousDue: 0 },
-    { id: 17, name: "เอก ทัพทัน", short: "เอก", initials: "ET", level: "S", membership: "club", checkedIn: true, phone: "086-201-5593", previousDue: 0 },
-    { id: 18, name: "อุ้ม ห้วยคต", short: "อุ้ม", initials: "UH", level: "N", membership: "guest", checkedIn: true, phone: "098-721-4036", previousDue: 0 },
-    { id: 19, name: "เจ เมืองอุทัย", short: "เจ", initials: "JM", level: "N", membership: "guest", checkedIn: false, phone: "092-545-8017", previousDue: 0 },
-    { id: 20, name: "ใบเฟิร์น หนองขาหย่าง", short: "ใบเฟิร์น", initials: "BK", level: "BG", membership: "guest", checkedIn: false, phone: "094-308-7721", previousDue: 0 },
-    { id: 21, name: "ปาล์ม ลานสัก", short: "ปาล์ม", initials: "PL", level: "S", membership: "club", checkedIn: false, phone: "089-466-3120", previousDue: 0 },
-    { id: 22, name: "ตูน ทัพทัน", short: "ตูน", initials: "TT", level: "N", membership: "guest", checkedIn: true, phone: "065-808-1149", previousDue: 0 },
-    ...CROWD_NAMES.map((name, index) => ({ id: 23 + index, name: `${name} อุทัย`, short: name, initials: name.slice(0, 2), level: ["BG", "N", "N", "S"][index % 4], membership: "club", checkedIn: true, phone: `080-200-${String(2300 + index)}`, previousDue: 0 })),
-    ...PEAK_NAMES.map((name, index) => ({ id: 55 + index, name: `${name} อุทัย`, short: name, initials: name.slice(0, 2), level: ["N", "S", "BG", "N"][index % 4], membership: "club", checkedIn: true, phone: `080-300-${String(5500 + index)}`, previousDue: 0 })),
-  ],
+  members: [],
   courts: [
     { id: 1, name: "สนาม 1", active: true },
     { id: 2, name: "สนาม 2", active: true },
     { id: 3, name: "สนาม 3", active: true },
     { id: 4, name: "สนาม 4", active: true },
   ],
-  queues: [
-    { id: 1, code: "Q01", playerIds: [1, 2, 3, 4], status: "playing", courtId: 1, startedAt: Date.now() - 17 * 60 * 1000 },
-    { id: 2, code: "Q02", playerIds: [5, 6, 7, 8], status: "playing", courtId: 2, startedAt: Date.now() - 9 * 60 * 1000 },
-    { id: 3, code: "Q03", playerIds: [11, 12, 13, 14], status: "waiting", courtId: null, createdAt: Date.now() - 6 * 60 * 1000 },
-    { id: 4, code: "Q04", playerIds: [15, 16, 17, 18], status: "waiting", courtId: null, createdAt: Date.now() - 2 * 60 * 1000 },
-    { id: 5, code: "Q05", playerIds: [23, 24, 25, 26], status: "waiting", courtId: null, createdAt: Date.now() - 95 * 1000 },
-    { id: 6, code: "Q06", playerIds: [27, 28, 29, 30], status: "waiting", courtId: null, createdAt: Date.now() - 80 * 1000 },
-    { id: 7, code: "Q07", playerIds: [31, 32, 33, 34], status: "waiting", courtId: null, createdAt: Date.now() - 65 * 1000 },
-    { id: 8, code: "Q08", playerIds: [35, 36, 37, 38], status: "waiting", courtId: null, createdAt: Date.now() - 50 * 1000 },
-    { id: 9, code: "Q09", playerIds: [39, 40, 41, 42], status: "waiting", courtId: null, createdAt: Date.now() - 35 * 1000 },
-    { id: 10, code: "Q10", playerIds: [43, 44, 45, 46], status: "waiting", courtId: null, createdAt: Date.now() - 20 * 1000 },
-    ...Array.from({ length: 10 }, (_, index) => ({
-      id: 11 + index,
-      code: `Q${String(11 + index).padStart(2, "0")}`,
-      playerIds: Array.from({ length: 4 }, (__, playerIndex) => 47 + index * 4 + playerIndex),
-      status: "waiting",
-      courtId: null,
-      createdAt: Date.now() - Math.max(5, 18 - index) * 1000,
-    })),
-  ],
-  ballRounds: [
-    { id: 1, playerIds: [1, 2, 3, 4], balls: 1, shuttleId: 1, shuttleName: "RSL Classic", ballCost: 90, fee: 5, createdAt: Date.now() - 55 * 60 * 1000 },
-    { id: 2, playerIds: [5, 6, 7, 8], balls: 1, shuttleId: 2, shuttleName: "Victor Master No. 1", ballCost: 105, fee: 5, createdAt: Date.now() - 32 * 60 * 1000 },
-  ],
+  queues: [],
+  ballRounds: [],
   shuttles: [
     { id: 1, brand: "RSL", model: "Classic", price: 90, active: true },
     { id: 2, brand: "Victor", model: "Master No. 1", price: 105, active: true },
@@ -94,10 +44,7 @@ const state = {
     { id: 3, name: "กริปพันด้าม", category: "equipment", price: 60, active: true },
     { id: 4, name: "ถุงเท้าแบด", category: "equipment", price: 120, active: true },
   ],
-  purchases: [
-    { id: 1, personId: 10, productId: 1, quantity: 2, unitPrice: 10, createdAt: Date.now() - 24 * 60 * 1000 },
-    { id: 2, personId: 11, productId: 3, quantity: 1, unitPrice: 60, createdAt: Date.now() - 12 * 60 * 1000 },
-  ],
+  purchases: [],
   payments: {},
   paymentProofs: {},
   settings: { guestEntryFee: 20, annualMemberFee: 0, systemChargeMode: "per_shuttle", systemFeePerShuttle: 5, monthlySystemFee: 1500 },
@@ -107,10 +54,7 @@ const state = {
     payments: { date: "today", query: "", sort: "amount_desc" },
     people: { query: "", sort: "name_asc" },
   },
-  analytics: {
-    revenueBeforeToday: { month: 18640, year: 142300 },
-    lastSixDays: [1320, 1880, 970, 2120, 1760, 2240],
-  },
+  analytics: { revenueBeforeToday: { month: 0, year: 0 }, lastSixDays: [0, 0, 0, 0, 0, 0] },
 };
 
 const SHARED_STATE_KEYS = [
@@ -297,8 +241,9 @@ function boardView() {
   const courts = state.courts.filter((court) => court.active);
   const queues = activeQueues().slice(0, realtime.connected ? 20 : state.boardQueueCount);
   const waiting = queues.filter((queue) => queue.status === "waiting");
-  const available = BOARD_AVAILABLE_IDS.map(member).filter((person) => person?.checkedIn);
-  const checkedInCount = queues.length * 4 + available.length;
+  const queuedPlayerIds = new Set(activeQueues().flatMap((queue) => queue.playerIds));
+  const available = checkedInMembers().filter((person) => !queuedPlayerIds.has(person.id));
+  const checkedInCount = checkedInMembers().length;
   const queueSlotCount = queues.length <= 10 ? 10 : 20;
   const queuesPerColumn = queueSlotCount / 2;
   const queueSlots = Array.from({ length: queueSlotCount }, (_, index) => tvQueueSlot(index + 1, queues[index]));
