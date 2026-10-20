@@ -1,8 +1,8 @@
 # Uthai Smash Club
 
-ต้นแบบเว็บจัดการชมรมแบดมินตันอุทัยธานี ครอบคลุมบอร์ดทีวี ผู้เล่น และผู้ดูแลระบบ เป็น Static HTML/CSS/JavaScript เปิดทดลองได้ทันทีโดยไม่ต้องติดตั้งแพ็กเกจ
+เว็บจัดการชมรมแบดมินตันอุทัยธานี ครอบคลุมบอร์ดทีวี ผู้เล่น และผู้ดูแลระบบ ใช้ Frontend แบบ HTML/CSS/JavaScript และ Backend Node.js + WebSocket
 
-> สถานะปัจจุบัน: Clickable Mock ข้อมูลจะรีเซ็ตเมื่อ Refresh และยังไม่ใช่ระบบ Production
+> สถานะปัจจุบัน: ระบบ Full-stack สำหรับรันบนเครื่องหรือเซิร์ฟเวอร์ ข้อมูลถูกบันทึกที่ Backend และทุกหน้าจออัปเดตแบบ Real-time
 
 ## หน้าหลัก
 
@@ -12,28 +12,35 @@
 | สำหรับผู้เล่น | `player/index.html` | เลือกชื่อ เช็คอิน ลงคิว ดูยอด แนบหลักฐาน เช็คเอาท์ และช่วยบริหารสนาม |
 | ผู้ดูแล | `admin/index.html` | Dashboard, คิวสนาม, CRUD เบิกลูก/ซื้อของ, รับชำระ, สมาชิก และ Master Data |
 
-PIN สำหรับหน้า Admin ใน Mock คือ `8888`
+PIN เริ่มต้นสำหรับหน้า Admin คือ `8888`
 
-## เปิดใช้งาน
+## ความต้องการ
 
-เปิดไฟล์ `index.html` โดยตรง หรือรัน Local Server จากโฟลเดอร์ repo:
+- Node.js 20 ขึ้นไป
+- pnpm หรือ npm
+
+## ติดตั้งและเปิดใช้งาน
 
 ```bash
-python3 -m http.server 8080
+pnpm install
+pnpm dev
 ```
 
-แล้วเปิด:
+Server เริ่มต้นที่ `http://127.0.0.1:8080` แล้วเปิด:
 
 - `http://localhost:8080/board/index.html`
 - `http://localhost:8080/player/index.html`
 - `http://localhost:8080/admin/index.html`
 
-ลิงก์ภายในใช้ `./` และ `../` แบบ Relative จึงใช้งานได้ทั้ง `file://` และ Static Hosting
+ใช้ `pnpm start` เมื่อต้องการรันโดยไม่เปิด Watch Mode
+
+การเปิด `index.html` แบบ `file://` ใช้ดูหน้าเว็บแบบออฟไลน์ได้ แต่จะไม่มี WebSocket และข้อมูลจะไม่บันทึก การใช้งานปกติต้องเปิดผ่าน Node Server
 
 ## ความสามารถสำคัญ
 
 - บอร์ดทีวี Responsive/Adaptive แสดงคิวแบบ 2 คอลัมน์ × 5 แถวเมื่อมีไม่เกิน 10 คิว และ 2 คอลัมน์ × 10 แถวเมื่อมี 20 คิว
 - ผู้เล่นค้นหาและเลือกตัวเองจาก Master ก่อนใช้งาน สมาชิกใหม่ต้องให้ Admin เพิ่มชื่อ
+- เบอร์โทรสมาชิกเป็นข้อมูลไม่บังคับ
 - เช็คอินตัวเองหรือเพื่อน และรวมผู้เล่นว่าง 4 คนลงคิว
 - ทุกคนช่วยจัดคิวลงสนาม คืนทีมกลับไปรอคิว จบเกม และเช็คเอาท์คนกลับบ้านได้
 - สมาชิกชมรมใช้สิทธิ์รายปี บุคคลภายนอกคิดค่าเข้าเริ่มต้น `20 บาท/วัน`
@@ -45,6 +52,8 @@ python3 -m http.server 8080
 - Dashboard ดูรายรับรายวัน รายเดือน และรายปี
 - ดาวน์โหลดรูปสรุปยอดค้างเพื่อส่งทวงใน Line เดิมได้
 - ค่าระบบเลือกได้ระหว่างคิดต่อลูกหรือเหมาจ่ายรายเดือน
+- Board, Player และ Admin ใช้ข้อมูลกลางชุดเดียวกันผ่าน WebSocket
+- Backend บันทึกข้อมูลอัตโนมัติลง `data/state.json`
 
 รายละเอียดกติกาและลำดับงานอยู่ใน [BUSINESS-FLOW.md](./BUSINESS-FLOW.md)
 
@@ -53,8 +62,15 @@ python3 -m http.server 8080
 ```text
 bat-uthai/
 ├── index.html                 # หน้าเริ่มต้นและเมนูหลัก
-├── app.js                     # Mock data, business logic และ UI actions
+├── app.js                     # Business logic, fallback data และ UI actions
 ├── styles.css                 # Layout และ responsive styles
+├── package.json               # คำสั่งรันและ dependency
+├── pnpm-lock.yaml             # ล็อกเวอร์ชัน dependency
+├── server/server.mjs          # HTTP API, Static Server, WebSocket และ persistence
+├── server/state-store.mjs     # โหลด Seed, รัน Migration และเขียน State แบบ atomic
+├── tests/realtime.test.mjs    # ทดสอบ Backend และการ Broadcast
+├── data/seed.json             # Master Data เริ่มต้นที่ commit ไปกับระบบ
+├── data/state.json            # ข้อมูลใช้งานจริง สร้างตอนรันและไม่ commit
 ├── board/index.html           # Route บอร์ดทีวี
 ├── player/index.html          # Route ผู้เล่น
 ├── admin/index.html           # Routeผู้ดูแล
@@ -64,15 +80,35 @@ bat-uthai/
     └── pdf/                   # PDF เสนอขาย
 ```
 
+## Backend และ Real-time
+
+- `GET /api/health` ตรวจสถานะ Server, จำนวน Client และ revision ล่าสุด
+- `GET /api/state` อ่าน Snapshot ปัจจุบัน
+- `WS /ws` รับและ Broadcast Snapshot ไปทุกหน้าจอ
+- เมื่อเปิดระบบครั้งแรก Backend สร้าง `data/state.json` จาก `data/seed.json`
+- Seed เก็บเฉพาะ Master Data ที่จำเป็น ได้แก่ ระดับมือ 4 สนาม รุ่นลูกแบด สินค้า และค่าบริการ โดยไม่สร้างสมาชิกหรือรายการการเงินปลอม
+- `server/state-store.mjs` รัน Migration อัตโนมัติตาม `schemaVersion` ก่อนเปิด Server ปัจจุบันเป็นเวอร์ชัน `1`
+- ทุกการเปลี่ยนคิว สนาม สมาชิก เบิกลูก ซื้อของ หรือรับชำระ จะบันทึกลง `data/state.json`
+- การเขียนไฟล์ใช้ไฟล์ชั่วคราวแล้ว Rename เพื่อลดความเสี่ยงไฟล์เสียกลางทาง
+
+หากต้องการเริ่มข้อมูลใหม่ ให้หยุด Server สำรอง `data/state.json` ไว้ก่อน แล้วค่อยลบไฟล์ดังกล่าว เมื่อเปิด Server อีกครั้งระบบจะสร้างข้อมูลจาก Seed
+
+## ตรวจสอบ
+
+```bash
+pnpm check
+```
+
+คำสั่งนี้ตรวจ Syntax ของ Frontend และทดสอบ Seed, Migration, HTTP, WebSocket, การ Broadcast, Persistence และสมาชิกที่ไม่มีเบอร์โทร
+
 ## นำขึ้น Server
 
-อัปโหลดไฟล์ทั้ง repo โดยรักษาโครงสร้างเดิม สามารถใช้ GitHub Pages, Netlify, Vercel Static หรือ Web Server ทั่วไปได้โดยไม่ต้องตั้ง Rewrite Rule
+ระบบต้องรันบน Hosting ที่รองรับ Node.js และ WebSocket ไม่สามารถใช้ Static Hosting อย่าง GitHub Pages เพียงอย่างเดียวได้
 
 สำหรับ Production ต้องเพิ่มอย่างน้อย:
 
-- Backend API และฐานข้อมูลถาวร
-- Authentication/Authorization แทน PIN ที่ตรวจใน Browser
-- WebSocket สำหรับอัปเดตบอร์ดและทุกหน้าจอแบบ Real-time
+- ฐานข้อมูล Production แทนไฟล์ JSON
+- Authentication/Authorization ฝั่ง Server สำหรับ Admin และผู้เล่น
 - Transaction สำหรับรับชำระและปิดยอดรายวัน
 - Audit Log สำหรับการแก้ไข/ลบรายการทางการเงิน
 - Backup, Error Monitoring และการทดสอบก่อนใช้งานจริง

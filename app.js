@@ -21,8 +21,8 @@ const state = {
   ballAdminMode: "list",
   shopAdminMode: "list",
   dashboardPeriod: "day",
-  boardDemoQueueCount: [10, 20].includes(requestedBoardQueueCount) ? requestedBoardQueueCount : 10,
-  boardDemoAutoCycle: ![10, 20].includes(requestedBoardQueueCount),
+  boardQueueCount: [10, 20].includes(requestedBoardQueueCount) ? requestedBoardQueueCount : 10,
+  boardAutoCycle: ![10, 20].includes(requestedBoardQueueCount),
   adminUnlocked: sessionStorage.getItem("uthai-admin-unlocked") === "true",
   currentPlayerId: null,
   selectedPlayers: [],
@@ -113,6 +113,105 @@ const state = {
   },
 };
 
+const SHARED_STATE_KEYS = [
+  "members", "courts", "queues", "ballRounds", "shuttles", "products",
+  "purchases", "payments", "paymentProofs", "settings", "analytics",
+];
+const realtime = {
+  socket: null,
+  connected: false,
+  hydrated: false,
+  applying: false,
+  clients: 0,
+  revision: 0,
+  lastSnapshot: "",
+  retryTimer: null,
+};
+
+function sharedStateSnapshot() {
+  return {
+    levels: { ...LEVELS },
+    state: Object.fromEntries(SHARED_STATE_KEYS.map((key) => [key, state[key]])),
+  };
+}
+
+function setConnectionStatus(status, label) {
+  const indicator = document.querySelector("[data-realtime-status]");
+  if (!indicator) return;
+  indicator.classList.toggle("offline", status === "offline");
+  indicator.classList.toggle("syncing", status === "syncing");
+  indicator.innerHTML = `<i></i> ${label}`;
+}
+
+function applyRealtimeSnapshot(snapshot, revision = 0) {
+  if (!snapshot?.state || !snapshot.levels) return;
+  realtime.applying = true;
+  SHARED_STATE_KEYS.forEach((key) => {
+    if (key in snapshot.state) state[key] = snapshot.state[key];
+  });
+  Object.keys(LEVELS).forEach((key) => delete LEVELS[key]);
+  Object.assign(LEVELS, snapshot.levels);
+  realtime.revision = revision;
+  realtime.hydrated = true;
+  realtime.lastSnapshot = JSON.stringify(sharedStateSnapshot());
+  realtime.applying = false;
+  state.lastSync = new Date();
+  render();
+}
+
+function queueRealtimeSync() {
+  if (!realtime.hydrated || realtime.applying || realtime.socket?.readyState !== WebSocket.OPEN) return;
+  const snapshot = sharedStateSnapshot();
+  const serialized = JSON.stringify(snapshot);
+  if (serialized === realtime.lastSnapshot) return;
+  realtime.lastSnapshot = serialized;
+  realtime.socket.send(JSON.stringify({ type: "state:update", baseRevision: realtime.revision, data: snapshot }));
+}
+
+function connectRealtime() {
+  if (!["http:", "https:"].includes(window.location.protocol)) {
+    setConnectionStatus("offline", "LOCAL");
+    return;
+  }
+  if ([WebSocket.CONNECTING, WebSocket.OPEN].includes(realtime.socket?.readyState)) return;
+  clearTimeout(realtime.retryTimer);
+  setConnectionStatus("syncing", "กำลังเชื่อมต่อ");
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+  realtime.socket = socket;
+
+  socket.addEventListener("open", () => {
+    realtime.connected = true;
+    setConnectionStatus("syncing", "กำลังซิงก์");
+  });
+  socket.addEventListener("message", (event) => {
+    try {
+      const message = JSON.parse(event.data);
+      if (message.type === "state:bootstrap-request") {
+        const snapshot = sharedStateSnapshot();
+        realtime.hydrated = true;
+        realtime.lastSnapshot = JSON.stringify(snapshot);
+        socket.send(JSON.stringify({ type: "state:bootstrap", data: snapshot }));
+      }
+      if (message.type === "state:snapshot") applyRealtimeSnapshot(message.data, message.revision);
+      if (message.type === "presence") {
+        realtime.clients = message.clients;
+        setConnectionStatus("online", `LIVE · ${message.clients} จอ`);
+      }
+      if (message.type === "error") showToast(`ซิงก์ไม่สำเร็จ: ${message.message}`);
+    } catch (error) {
+      console.error("Realtime message error", error);
+    }
+  });
+  socket.addEventListener("close", () => {
+    realtime.connected = false;
+    realtime.hydrated = false;
+    setConnectionStatus("offline", "OFFLINE");
+    realtime.retryTimer = setTimeout(connectRealtime, 2_000);
+  });
+  socket.addEventListener("error", () => socket.close());
+}
+
 const app = document.querySelector("#app");
 const dialog = document.querySelector("#appDialog");
 const dialogContent = document.querySelector("#dialogContent");
@@ -196,7 +295,7 @@ function renderClock() {
 
 function boardView() {
   const courts = state.courts.filter((court) => court.active);
-  const queues = activeQueues().slice(0, state.boardDemoQueueCount);
+  const queues = activeQueues().slice(0, realtime.connected ? 20 : state.boardQueueCount);
   const waiting = queues.filter((queue) => queue.status === "waiting");
   const available = BOARD_AVAILABLE_IDS.map(member).filter((person) => person?.checkedIn);
   const checkedInCount = queues.length * 4 + available.length;
@@ -207,9 +306,9 @@ function boardView() {
     <section class="page-enter tv-board density-${queues.length} ${queueSlotCount === 10 ? "queue-layout-compact" : "queue-layout-peak"}">
       <div class="page-heading">
         <div><p class="eyebrow">สนามแบดมินตันอุทัยธานี</p><h1>บอร์ดลงคิว</h1><p>จอทีวีสำหรับดูสถานะทั้งหมด · จัดการคิวผ่านมือถือหรือหน้าผู้ดูแล</p></div>
-        <div class="clock"><span class="clock-time" id="clockTime"></span><span class="clock-date" id="clockDate"></span><span class="tv-refresh">● LIVE · ${state.boardDemoAutoCycle ? `สลับ ${queues.length === 10 ? "20" : "10"} คิวใน` : `ล็อก ${queues.length} คิว · อัปเดตใน`} <b id="syncCount">15</b> วิ</span></div>
+        <div class="clock"><span class="clock-time" id="clockTime"></span><span class="clock-date" id="clockDate"></span><span class="tv-refresh">${realtime.connected ? `● WEBSOCKET · ${realtime.clients} จอเชื่อมต่อ` : `● LOCAL · ${state.boardAutoCycle ? `ตรวจข้อมูลอีกครั้งใน` : `แสดง ${queues.length} คิว · ตรวจข้อมูลใน`} <b id="syncCount">15</b> วิ`}</span></div>
       </div>
-      <div class="tv-demo-status"><span>DEMO LOAD</span><strong>${queues.length} คิว</strong><small>${queues.length === 20 ? "ช่วงพีก · ใช้เต็มความจุ" : "ช่วงปกติ · เหลือช่องรองรับอีก 10 คิว"}</small></div>
+      <div class="tv-load-status"><span>QUEUE LOAD</span><strong>${queues.length} คิว</strong><small>${queues.length === 20 ? "ช่วงพีก · ใช้เต็มความจุ" : "ช่วงปกติ · เหลือช่องรองรับอีก 10 คิว"}</small></div>
       <div class="metric-row">
         <div class="metric"><span>เช็คอินแล้ว</span><strong>${checkedInCount}<em> คน</em></strong></div>
         <div class="metric highlight"><span>ว่าง ไม่มีคิว</span><strong>${available.length}<em> คน</em></strong></div>
@@ -267,9 +366,9 @@ function queueItem(queue) {
 
 function memberSearchPicker({ hiddenId, action, people = state.members, placeholder = "พิมพ์ชื่อหรือเบอร์ หรือกดเพื่อเลือก", extraClass = "", selectedId = null }) {
   const selectedPerson = selectedId ? member(selectedId) : null;
-  const options = people.map((person) => `<button type="button" class="picker-option" data-action="${action}" data-person="${person.id}" data-search="${person.name} ${person.short} ${person.phone} ${person.level} ${membershipName(person)}">
+  const options = people.map((person) => `<button type="button" class="picker-option" data-action="${action}" data-person="${person.id}" data-search="${person.name} ${person.short} ${person.phone || ""} ${person.level} ${membershipName(person)}">
     ${initialsAvatar(person)}
-    <span class="picker-person"><strong>${person.name}</strong><small>${person.phone} · มือ ${person.level} · ${membershipName(person)}</small></span>
+    <span class="picker-person"><strong>${person.name}</strong><small>${person.phone ? `${person.phone} · ` : ""}มือ ${person.level} · ${membershipName(person)}</small></span>
   </button>`).join("");
   return `<div class="player-picker ${extraClass}">
     <div class="picker-control">
@@ -430,7 +529,7 @@ function adminLoginView() {
           <small id="adminLoginError" aria-live="polite"></small>
           <button class="button block" type="submit">เข้าสู่ระบบ →</button>
         </form>
-        <div class="admin-pin-hint"><strong>สำหรับระบบ Mock</strong><span>ใช้ PIN: 8888</span></div>
+        <div class="admin-pin-hint"><strong>PIN เริ่มต้น</strong><span>8888</span></div>
       </div>
     </section>`;
 }
@@ -470,7 +569,7 @@ function overviewAdmin() {
   const report = dashboardPeriodData(metrics, state.dashboardPeriod);
   const maxDaily = Math.max(...report.series.map((day) => day.value), 1);
   return `
-    <div class="page-heading"><div><p class="eyebrow">ADMIN DASHBOARD</p><h1>ภาพรวมสนามและรายรับ</h1><p>สถานะประจำวันที่ ${new Date().toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" })} · ข้อมูลจำลอง</p></div><div class="dashboard-heading-actions"><button class="button secondary" data-action="download-debt-image">⇩ รูปทวงเงิน</button><button class="button" data-action="checkin">＋ เช็คอินลูกค้า</button></div></div>
+    <div class="page-heading"><div><p class="eyebrow">ADMIN DASHBOARD</p><h1>ภาพรวมสนามและรายรับ</h1><p>สถานะประจำวันที่ ${new Date().toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" })}</p></div><div class="dashboard-heading-actions"><button class="button secondary" data-action="download-debt-image">⇩ รูปทวงเงิน</button><button class="button" data-action="checkin">＋ เช็คอินลูกค้า</button></div></div>
     <div class="dashboard-period-bar"><div><strong>ดูรายรับ</strong><span>${report.description}</span></div><div class="dashboard-period-tabs">${[["day", "วันนี้"], ["month", "เดือนนี้"], ["year", "ปีนี้"]].map(([period, label]) => `<button class="${state.dashboardPeriod === period ? "active" : ""}" data-action="set-dashboard-period" data-period="${period}">${label}</button>`).join("")}</div></div>
     <div class="stat-grid dashboard-stats">
       <div class="stat-card featured"><div class="stat-icon">฿</div><strong>${formatMoney(metrics.today)}</strong><small>รายรับวันนี้</small><span>จาก ${metrics.games} เกม</span></div>
@@ -541,9 +640,9 @@ function ballPlayerPicker(index, selectedId = null, allowAll = false) {
       : person.checkedIn
         ? `${membershipName(person)} · มือ ${person.level}`
         : "ยังไม่เช็คอิน";
-    return `<button type="button" class="picker-option ${!allowAll && overdue ? "blocked" : unavailable ? "unavailable" : ""}" ${unavailable ? "disabled" : `data-action="pick-ball-player"`} data-person="${person.id}" data-search="${person.name} ${person.short} ${person.phone} ${person.level} ${membershipName(person)}">
+    return `<button type="button" class="picker-option ${!allowAll && overdue ? "blocked" : unavailable ? "unavailable" : ""}" ${unavailable ? "disabled" : `data-action="pick-ball-player"`} data-person="${person.id}" data-search="${person.name} ${person.short} ${person.phone || ""} ${person.level} ${membershipName(person)}">
       ${initialsAvatar(person)}
-      <span class="picker-person"><strong>${person.name}</strong><small>${person.phone} · มือ ${person.level}</small></span>
+      <span class="picker-person"><strong>${person.name}</strong><small>${person.phone ? `${person.phone} · ` : ""}มือ ${person.level}</small></span>
       <span class="picker-status ${overdue ? "danger" : ""}">${status}</span>
     </button>`;
   }).join("");
@@ -591,7 +690,7 @@ function ballsAdmin() {
     <div class="page-heading"><div><p class="eyebrow">ห้องเบิกลูก · เพิ่มรายการ</p><h1>เบิกลูกเกมใหม่</h1><p>ผู้เล่นคนเดิมเลือกซ้ำได้ หากออกค่าลูกหรือเลี้ยงให้อีกคน</p></div><button class="button secondary" data-action="set-ball-mode" data-mode="list">← กลับตารางรายการ</button></div>
     <section class="panel picker-panel ball-create-panel"><div class="panel-header"><div><h2>ข้อมูลเกมและผู้รับผิดชอบค่าใช้จ่าย</h2><p>ค้นหาด้วยชื่อหรือเบอร์ · เลือกให้ครบ 4 ช่อง · ชื่อซ้ำจะคิดค่าใช้จ่ายตามจำนวนช่อง</p></div><span class="badge blue">CREATE</span></div>
       <div class="ball-form">
-        <div class="field"><label>ผู้เล่น / ผู้รับผิดชอบค่าใช้จ่าย 4 ช่อง</label><div class="four-selects">${[0,1,2,3].map(ballPlayerPicker).join("")}</div><small class="field-help">ตัวอย่าง: นัทเลี้ยงเมย์ ให้เลือก “นัท” ในช่องของนัทและช่องของเมย์ได้</small></div>
+        <div class="field"><label>ผู้เล่น / ผู้รับผิดชอบค่าใช้จ่าย 4 ช่อง</label><div class="four-selects">${[0,1,2,3].map(ballPlayerPicker).join("")}</div><small class="field-help">กรณีคนหนึ่งออกค่าใช้จ่ายให้อีกคน สามารถเลือกชื่อเดิมซ้ำได้</small></div>
         <div class="shop-form-row"><div class="field"><label for="ballShuttle">ยี่ห้อ / รุ่นลูกแบด</label><select id="ballShuttle">${activeShuttles.map((item) => `<option value="${item.id}">${shuttleLabel(item)} · ฿${formatMoney(item.price)}/ลูก</option>`).join("")}</select></div><div class="field"><label for="ballCount">จำนวนที่เบิก</label><select id="ballCount">${[1,2,3].map((count) => `<option value="${count}">${count} ลูก</option>`).join("")}</select></div></div>
         <div class="cost-box" id="costPreview"><div class="cost-line"><span>${selectedShuttle ? shuttleLabel(selectedShuttle) : "ไม่มีลูกแบดที่เปิดใช้"}</span><strong class="money">฿${formatMoney(firstBallCost)}</strong></div><div class="cost-line"><span>ค่าระบบ · ${systemFeeLabel()}</span><strong class="money">฿${formatMoney(firstSystemFee)}</strong></div><div class="cost-line total"><span>รวม / หาร 4 ช่อง</span><strong class="money">฿${formatMoney((firstBallCost + firstSystemFee) / 4)} ต่อช่อง</strong></div></div>
         <button class="button block" data-action="issue-ball" ${selectedShuttle ? "" : "disabled"}>ยืนยันเบิกลูกและบันทึกเกม</button>
@@ -831,13 +930,13 @@ function peopleAdmin() {
     <div class="page-heading"><div><p class="eyebrow">MASTER สมาชิก</p><h1>สมาชิกทั้งหมด</h1><p>จัดการประเภทสมาชิก ระดับมือ และสิทธิ์การลงเล่น</p></div><button class="button" data-action="new-member">＋ เพิ่มสมาชิก</button></div>
     <section class="panel"><div class="panel-header"><div><h2>${people.length} / ${state.members.length} สมาชิก</h2><p>${checkedInMembers().length} คนอยู่ในโรงยิมตอนนี้</p></div><div class="dashboard-heading-actions"><button class="button secondary" data-action="show-checkout-picker">↗ เช็คเอาท์กลับบ้าน</button><button class="button lime checkin-primary" data-action="checkin">✓ เช็คอินสมาชิก</button></div></div>${adminFilterBar("people", { showDate: false, sortOptions: [["name_asc", "ชื่อ ก–ฮ"], ["checked_in", "เช็คอินก่อน"], ["debt_desc", "ยอดค้างสูงสุด"], ["level", "ระดับมือ"]] })}<div class="data-list">
       <div class="data-row head member-row"><span>ชื่อผู้เล่น</span><span>ประเภทสมาชิก</span><span>ระดับมือ</span><span>สถานะวันนี้</span><span>สิทธิ์พรุ่งนี้</span></div>
-      ${people.map((person) => `<div class="data-row member-row ${person.previousDue ? "blocked-member" : ""}"><div class="person-cell">${initialsAvatar(person)}<div><strong>${person.name}</strong><small>${person.phone}</small></div></div><div class="membership-cell"><button class="badge ${person.membership === "club" ? "club" : "guest"}" data-action="toggle-membership" data-person="${person.id}">${membershipName(person)}</button><small>${membershipDetail(person)}</small></div><button class="badge blue" data-action="cycle-level" data-person="${person.id}">มือ ${person.level}</button><div class="member-presence"><span class="badge ${person.checkedIn ? "success" : ""}">${person.checkedIn ? "เช็คอินแล้ว" : "ยังไม่มา"}</span>${person.checkedIn ? `<button class="button small checkout-button" data-action="checkout" data-person="${person.id}">↗ กลับบ้าน</button>` : ""}</div>${person.previousDue ? `<button class="badge danger overdue-action" data-action="clear-overdue" data-person="${person.id}" title="กดเมื่อรับชำระยอดค้างแล้ว">ระงับสิทธิ์ · ค้าง ฿${formatMoney(person.previousDue)}</button>` : `<span class="badge success">เล่นได้</span>`}</div>`).join("") || `<div class="empty-state">ไม่พบสมาชิกตามคำค้น</div>`}
+      ${people.map((person) => `<div class="data-row member-row ${person.previousDue ? "blocked-member" : ""}"><div class="person-cell">${initialsAvatar(person)}<div><strong>${person.name}</strong><small>${person.phone || "ไม่ระบุเบอร์โทร"}</small></div></div><div class="membership-cell"><button class="badge ${person.membership === "club" ? "club" : "guest"}" data-action="toggle-membership" data-person="${person.id}">${membershipName(person)}</button><small>${membershipDetail(person)}</small></div><button class="badge blue" data-action="cycle-level" data-person="${person.id}">มือ ${person.level}</button><div class="member-presence"><span class="badge ${person.checkedIn ? "success" : ""}">${person.checkedIn ? "เช็คอินแล้ว" : "ยังไม่มา"}</span>${person.checkedIn ? `<button class="button small checkout-button" data-action="checkout" data-person="${person.id}">↗ กลับบ้าน</button>` : ""}</div>${person.previousDue ? `<button class="badge danger overdue-action" data-action="clear-overdue" data-person="${person.id}" title="กดเมื่อรับชำระยอดค้างแล้ว">ระงับสิทธิ์ · ค้าง ฿${formatMoney(person.previousDue)}</button>` : `<span class="badge success">เล่นได้</span>`}</div>`).join("") || `<div class="empty-state">ไม่พบสมาชิกตามคำค้น</div>`}
     </div></section>`;
 }
 
 function mastersAdmin() {
   return `
-    <div class="page-heading master-page-heading"><div><p class="eyebrow">SYSTEM SETTINGS · CRUD</p><h1>ตั้งค่าระบบ</h1><p>เพิ่ม แก้ไข ลบ และเปิด/ปิดข้อมูลหลักที่ทุกหน้าจอใช้งานร่วมกัน</p></div><span class="badge success">Mock data · แก้ได้จริงจนกว่าจะรีเฟรช</span></div>
+    <div class="page-heading master-page-heading"><div><p class="eyebrow">SYSTEM SETTINGS · CRUD</p><h1>ตั้งค่าระบบ</h1><p>เพิ่ม แก้ไข ลบ และเปิด/ปิดข้อมูลหลักที่ทุกหน้าจอใช้งานร่วมกัน</p></div><span class="badge success">บันทึกบนเซิร์ฟเวอร์แบบ Real-time</span></div>
     <div class="settings-grid">
       <section class="panel master-panel"><div class="panel-header"><div><h2>Master สนาม</h2><p>${state.courts.length} สนาม · เปิด/ปิดได้โดยไม่ต้องลบ</p></div><button class="button small" data-action="show-master-form" data-kind="court">＋ เพิ่ม</button></div><div class="data-list">${state.courts.map((court) => `<div class="master-court"><div><strong>${court.name}</strong><small>${getPlayingQueue(court.id) ? "กำลังมีผู้เล่น" : court.active ? "เปิดใช้งาน" : "ปิดชั่วคราว"}</small></div><div class="master-actions"><button class="toggle ${court.active ? "on" : ""}" data-action="toggle-court" data-court="${court.id}" aria-label="เปิดปิด ${court.name}"></button><button class="button small secondary" data-action="show-master-form" data-kind="court" data-key="${court.id}">แก้ไข</button><button class="button small coral" data-action="show-delete-master" data-kind="court" data-key="${court.id}">ลบ</button></div></div>`).join("")}</div></section>
       <section class="panel master-panel"><div class="panel-header"><div><h2>Master ระดับมือ</h2><p>${Object.keys(LEVELS).length} ระดับ · ใช้กับสมาชิกและการจัดเกม</p></div><button class="button small" data-action="show-master-form" data-kind="level">＋ เพิ่ม</button></div><div class="data-list level-guide">${Object.entries(LEVELS).map(([code, item]) => `<div class="level-item master-level"><span class="level-big">${code}</span><div><strong>${item.label}</strong><small>${item.description}</small></div><div class="master-actions"><button class="button small secondary" data-action="show-master-form" data-kind="level" data-key="${code}">แก้ไข</button><button class="button small coral" data-action="show-delete-master" data-kind="level" data-key="${code}">ลบ</button></div></div>`).join("")}</div></section>
@@ -845,7 +944,7 @@ function mastersAdmin() {
       <section class="panel master-panel"><div class="panel-header"><div><h2>Master น้ำ / อุปกรณ์</h2><p>${state.products.length} รายการ · ใช้ในเมนูซื้อของ</p></div><button class="button small" data-action="show-master-form" data-kind="product">＋ เพิ่ม</button></div><div class="data-list">${state.products.map((item) => `<div class="master-court product-master"><div><strong>${item.name}</strong><small>${productCategoryName(item)} · ${item.active ? "เปิดขาย" : "ปิดขาย"}</small></div><strong class="money">฿${formatMoney(item.price)}</strong><div class="master-actions"><button class="toggle ${item.active ? "on" : ""}" data-action="toggle-product" data-product="${item.id}" aria-label="เปิดปิด ${item.name}"></button><button class="button small secondary" data-action="show-master-form" data-kind="product" data-key="${item.id}">แก้ไข</button><button class="button small coral" data-action="show-delete-master" data-kind="product" data-key="${item.id}">ลบ</button></div></div>`).join("")}</div></section>
       <section class="panel system-plan-panel"><div class="panel-header"><div><h2>ค่าระบบที่จ่ายให้ผู้พัฒนา</h2><p>เลือกใช้งานเพียง 1 รูปแบบ</p></div><span class="badge success">กำลังใช้: ${state.settings.systemChargeMode === "per_shuttle" ? "คิดต่อลูก" : "รายเดือน"}</span></div><div class="system-plan-options"><button class="system-plan-option ${state.settings.systemChargeMode === "per_shuttle" ? "selected" : ""}" type="button" data-action="select-system-charge-mode" data-mode="per_shuttle"><span class="system-plan-radio"></span><div><strong>คิดตามลูกที่เบิก</strong><small>หักส่งลูกละ ฿${formatMoney(state.settings.systemFeePerShuttle)}</small></div></button><button class="system-plan-option ${state.settings.systemChargeMode === "monthly" ? "selected" : ""}" type="button" data-action="select-system-charge-mode" data-mode="monthly"><span class="system-plan-radio"></span><div><strong>เหมาจ่ายรายเดือน</strong><small>จ่าย ฿${formatMoney(state.settings.monthlySystemFee)} ต่อเดือน</small></div></button></div><div class="system-plan-footer"><span>${state.settings.systemChargeMode === "per_shuttle" ? "ค่าระบบรวมในแต่ละเกมและหารผู้เล่น 4 คน" : "ไม่บวกค่าระบบในยอดผู้เล่นแต่ละเกม"}</span><button class="button small secondary" data-action="show-master-form" data-kind="settings">แก้จำนวนเงิน</button></div></section>
       <section class="panel"><div class="panel-header"><div><h2>อัตราสมาชิกและค่าเข้า</h2><p>ค่าบริการของชมรม</p></div><button class="button small secondary" data-action="show-master-form" data-kind="settings">แก้ไข</button></div><div class="data-list"><div class="master-court"><div><strong>ค่าเข้าบุคคลภายนอก</strong><small>คิดครั้งเดียวต่อวันที่มาเล่น</small></div><strong class="money">฿${formatMoney(state.settings.guestEntryFee)}</strong></div><div class="master-court"><div><strong>ค่าสมาชิกชมรมรายปี</strong><small>${state.settings.annualMemberFee ? "อัตราปัจจุบัน" : "ยังไม่กำหนด"}</small></div><strong>${state.settings.annualMemberFee ? `฿${formatMoney(state.settings.annualMemberFee)}` : "—"}</strong></div></div></section>
-      <section class="panel"><div class="panel-header"><div><h2>ประเภทสมาชิก</h2><p>เงื่อนไขหลักของ prototype</p></div></div><div class="data-list level-guide"><div class="level-item"><span class="level-big">C</span><div><strong>สมาชิกชมรม</strong><small>ชำระสมาชิกเป็นรายปี · ไม่เสียค่าเข้ารายวัน</small></div></div><div class="level-item"><span class="level-big" style="background:#ffe1dc">G</span><div><strong>บุคคลภายนอก</strong><small>เพิ่มค่าเข้า ฿${formatMoney(state.settings.guestEntryFee)} เมื่อเช็คอินครั้งแรกของวัน</small></div></div></div></section>
+      <section class="panel"><div class="panel-header"><div><h2>ประเภทสมาชิก</h2><p>เงื่อนไขการใช้งานของชมรม</p></div></div><div class="data-list level-guide"><div class="level-item"><span class="level-big">C</span><div><strong>สมาชิกชมรม</strong><small>ชำระสมาชิกเป็นรายปี · ไม่เสียค่าเข้ารายวัน</small></div></div><div class="level-item"><span class="level-big" style="background:#ffe1dc">G</span><div><strong>บุคคลภายนอก</strong><small>เพิ่มค่าเข้า ฿${formatMoney(state.settings.guestEntryFee)} เมื่อเช็คอินครั้งแรกของวัน</small></div></div></div></section>
       <section class="panel"><div class="panel-header"><div><h2>กติกาการเล่น</h2><p>ใช้สื่อสารให้ผู้เล่นทุกคนเข้าใจตรงกัน</p></div></div><div class="data-list"><div class="callout" style="background:#edf7c8;color:#41561e">✓ เช็คอินก่อนดูและลงคิว<br>✓ บุคคลภายนอกเสียค่าเข้า ฿${formatMoney(state.settings.guestEntryFee)} ต่อวัน<br>✓ 1 คิวต้องมีผู้เล่น 4 คน<br>✓ ใครก็ได้สามารถจัดคิวลงสนามและจบเกม<br>✓ ค้างชำระข้ามวันจะถูกระงับสิทธิ์</div></div></section>
     </div>`;
 }
@@ -959,7 +1058,7 @@ function masterName(kind, key) {
 function showDeleteMaster(kind, key) {
   const name = masterName(kind, key);
   if (!name) return showToast("ไม่พบข้อมูลที่ต้องการลบ");
-  openDialog(`<div class="dialog-header"><div><h2>ลบ ${name}?</h2><p>ระบบจะตรวจสอบการใช้งานก่อนลบ เพื่อไม่ให้ข้อมูลเดิมเสีย</p></div><button class="dialog-close" value="cancel">×</button></div><div class="dialog-body"><div class="callout" style="background:#fff0ec;color:#8d4938">การลบย้อนกลับไม่ได้ในรอบใช้งานนี้ แต่ข้อมูล mock จะกลับมาเมื่อรีเฟรชหน้าเว็บ</div></div><div class="dialog-footer"><button class="button secondary" value="cancel">ยกเลิก</button><button class="button coral" type="button" data-action="confirm-delete-master" data-kind="${kind}" data-key="${key}">ยืนยันลบ</button></div>`);
+  openDialog(`<div class="dialog-header"><div><h2>ลบ ${name}?</h2><p>ระบบจะตรวจสอบการใช้งานก่อนลบ เพื่อไม่ให้ข้อมูลเดิมเสีย</p></div><button class="dialog-close" value="cancel">×</button></div><div class="dialog-body"><div class="callout" style="background:#fff0ec;color:#8d4938">การลบจะมีผลกับทุกหน้าจอและย้อนกลับไม่ได้ กรุณาตรวจสอบรายการก่อนยืนยัน</div></div><div class="dialog-footer"><button class="button secondary" value="cancel">ยกเลิก</button><button class="button coral" type="button" data-action="confirm-delete-master" data-kind="${kind}" data-key="${key}">ยืนยันลบ</button></div>`);
 }
 
 function deleteMaster(kind, key) {
@@ -992,6 +1091,7 @@ function render() {
   document.querySelectorAll("[data-route-link]").forEach((link) => link.classList.toggle("active", link.dataset.routeLink === state.view));
   document.title = `${state.view === "board" ? "บอร์ดสนาม" : state.view === "mobile" ? "สำหรับผู้เล่น" : "ผู้ดูแล"} — Uthai Smash`;
   renderClock();
+  queueRealtimeSync();
 }
 
 function showCheckinDialog() {
@@ -999,14 +1099,14 @@ function showCheckinDialog() {
   const missingNameHelp = state.view === "admin" ? "ไม่พบชื่อ? ปิดหน้าต่างแล้วกด + เพิ่มสมาชิก" : "ไม่พบชื่อ? แจ้งแอดมินเพิ่มเข้าระบบก่อน";
   openDialog(`
     <div class="dialog-header"><div><h2>ค้นหาและเลือกชื่อเพื่อเช็คอิน</h2><p>พิมพ์ชื่อหรือเบอร์ แล้วติ๊กเลือกได้หลายคนพร้อมกัน</p></div><button class="dialog-close" value="cancel" aria-label="ปิด">×</button></div>
-    <div class="dialog-body"><div class="checkin-search-box"><span>⌕</span><input class="checkin-search" type="search" aria-label="ค้นหาสมาชิกเพื่อเช็คอิน" placeholder="พิมพ์ชื่อ เบอร์โทร หรือระดับมือ" autocomplete="off"></div><div class="callout"><strong>${missingNameHelp}</strong> · บุคคลภายนอกคิดค่าเข้า ฿${state.settings.guestEntryFee} ครั้งเดียวต่อวัน · ผู้ที่ค้างยอดเดิมต้องชำระก่อน</div><div class="checkin-list">${candidates.map((person) => `<label class="checkin-row ${person.previousDue ? "blocked" : ""}" data-search="${person.name} ${person.short} ${person.phone} ${person.level} ${membershipName(person)}"><input type="checkbox" name="checkinMember" value="${person.id}" ${person.previousDue ? "disabled" : ""}>${initialsAvatar(person)}<span><strong>${person.name}</strong><small>มือ ${person.level} · ${membershipName(person)}</small></span><span class="row-status badge ${person.previousDue ? "danger" : person.membership === "guest" ? "warning" : "success"}">${person.previousDue ? `ค้าง ฿${formatMoney(person.previousDue)}` : membershipDetail(person)}</span></label>`).join("") || `<div class="empty-state">ทุกคนเช็คอินแล้ว</div>`}<div class="checkin-empty empty-state" hidden>ไม่พบชื่อที่ค้นหา</div></div></div>
+    <div class="dialog-body"><div class="checkin-search-box"><span>⌕</span><input class="checkin-search" type="search" aria-label="ค้นหาสมาชิกเพื่อเช็คอิน" placeholder="พิมพ์ชื่อ เบอร์โทร หรือระดับมือ" autocomplete="off"></div><div class="callout"><strong>${missingNameHelp}</strong> · บุคคลภายนอกคิดค่าเข้า ฿${state.settings.guestEntryFee} ครั้งเดียวต่อวัน · ผู้ที่ค้างยอดเดิมต้องชำระก่อน</div><div class="checkin-list">${candidates.map((person) => `<label class="checkin-row ${person.previousDue ? "blocked" : ""}" data-search="${person.name} ${person.short} ${person.phone || ""} ${person.level} ${membershipName(person)}"><input type="checkbox" name="checkinMember" value="${person.id}" ${person.previousDue ? "disabled" : ""}>${initialsAvatar(person)}<span><strong>${person.name}</strong><small>มือ ${person.level} · ${membershipName(person)}</small></span><span class="row-status badge ${person.previousDue ? "danger" : person.membership === "guest" ? "warning" : "success"}">${person.previousDue ? `ค้าง ฿${formatMoney(person.previousDue)}` : membershipDetail(person)}</span></label>`).join("") || `<div class="empty-state">ทุกคนเช็คอินแล้ว</div>`}<div class="checkin-empty empty-state" hidden>ไม่พบชื่อที่ค้นหา</div></div></div>
     <div class="dialog-footer"><button class="button secondary" value="cancel">ยกเลิก</button><button class="button" type="button" data-action="confirm-checkin">ยืนยันเช็คอิน</button></div>`);
 }
 
 function showMemberDialog() {
   openDialog(`
     <div class="dialog-header"><div><h2>เพิ่มสมาชิกใหม่</h2><p>เฉพาะแอดมิน · เพิ่มเข้า Master ก่อน แล้วให้ผู้เล่นเลือกเช็คอินเอง</p></div><button class="dialog-close" value="cancel">×</button></div>
-    <div class="dialog-body"><div class="field"><label for="newName">ชื่อที่ใช้เรียก</label><input id="newName" placeholder="เช่น เต้ เมืองอุทัย" autocomplete="name"></div><div class="field"><label for="newPhone">เบอร์โทรศัพท์</label><input id="newPhone" placeholder="08x-xxx-xxxx" inputmode="tel"></div><div class="field"><label for="newMembership">ประเภทสมาชิก</label><select id="newMembership"><option value="guest">บุคคลภายนอก · ค่าเข้า ฿${state.settings.guestEntryFee}/วัน</option><option value="club">สมาชิกชมรม · ชำระรายปี</option></select></div><div class="field"><label for="newLevel">ระดับมือเริ่มต้น</label><select id="newLevel">${Object.entries(LEVELS).map(([code, item]) => `<option value="${code}">${code} · ${item.label}</option>`).join("")}</select></div></div>
+    <div class="dialog-body"><div class="field"><label for="newName">ชื่อที่ใช้เรียก</label><input id="newName" placeholder="เช่น เต้ เมืองอุทัย" autocomplete="name"></div><div class="field"><label for="newPhone">เบอร์โทรศัพท์ <span class="optional-label">ไม่บังคับ</span></label><input id="newPhone" placeholder="เว้นว่างได้" inputmode="tel"></div><div class="field"><label for="newMembership">ประเภทสมาชิก</label><select id="newMembership"><option value="guest">บุคคลภายนอก · ค่าเข้า ฿${state.settings.guestEntryFee}/วัน</option><option value="club">สมาชิกชมรม · ชำระรายปี</option></select></div><div class="field"><label for="newLevel">ระดับมือเริ่มต้น</label><select id="newLevel">${Object.entries(LEVELS).map(([code, item]) => `<option value="${code}">${code} · ${item.label}</option>`).join("")}</select></div></div>
     <div class="dialog-footer"><button class="button secondary" value="cancel">ยกเลิก</button><button class="button" type="button" data-action="save-member">เพิ่มเข้ารายชื่อ</button></div>`);
 }
 
@@ -1421,8 +1521,8 @@ function saveNewMember() {
   const phone = dialogContent.querySelector("#newPhone").value.trim();
   const level = dialogContent.querySelector("#newLevel").value;
   const membership = dialogContent.querySelector("#newMembership").value;
-  if (!name || !phone) return showToast("กรุณากรอกชื่อและเบอร์โทร");
-  const id = Math.max(...state.members.map((person) => person.id)) + 1;
+  if (!name) return showToast("กรุณากรอกชื่อสมาชิก");
+  const id = Math.max(0, ...state.members.map((person) => person.id)) + 1;
   const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
   state.members.push({ id, name, short: name.split(/\s+/)[0], initials, level, membership, checkedIn: false, visitedToday: false, phone, previousDue: 0 });
   closeDialog(); render(); showToast(`เพิ่ม ${name} แล้ว · ให้ผู้เล่นเลือกชื่อเพื่อเช็คอินเอง`);
@@ -1562,8 +1662,8 @@ setInterval(() => {
   if (syncCountdown <= 0) {
     state.lastSync = new Date();
     syncCountdown = 15;
-    if (state.view === "board") {
-      if (state.boardDemoAutoCycle) state.boardDemoQueueCount = state.boardDemoQueueCount === 10 ? 20 : 10;
+    if (state.view === "board" && !realtime.connected) {
+      if (state.boardAutoCycle) state.boardQueueCount = state.boardQueueCount === 10 ? 20 : 10;
       render();
     }
   }
@@ -1576,3 +1676,4 @@ console.assert(Math.abs(dashboardCheck.today - dashboardCheck.ballRevenue - dash
 console.assert(dashboardCheck.year >= dashboardCheck.month && dashboardCheck.month >= dashboardCheck.today, "Dashboard period totals must be cumulative");
 
 render();
+connectRealtime();

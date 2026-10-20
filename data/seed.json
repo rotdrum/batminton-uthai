@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "snapshot": {
+    "levels": {
+      "BG": {
+        "label": "Beginner",
+        "description": "มือใหม่ กำลังฝึกพื้นฐาน"
+      },
+      "N": {
+        "label": "Normal",
+        "description": "เล่นทั่วไป ตีโต้และลงเกมได้"
+      },
+      "S": {
+        "label": "Strong",
+        "description": "มือแข็ง แข่งขันและคุมเกมได้"
+      }
+    },
+    "state": {
+      "members": [],
+      "courts": [
+        { "id": 1, "name": "สนาม 1", "active": true },
+        { "id": 2, "name": "สนาม 2", "active": true },
+        { "id": 3, "name": "สนาม 3", "active": true },
+        { "id": 4, "name": "สนาม 4", "active": true }
+      ],
+      "queues": [],
+      "ballRounds": [],
+      "shuttles": [
+        { "id": 1, "brand": "RSL", "model": "Classic", "price": 90, "active": true },
+        { "id": 2, "brand": "Victor", "model": "Master No. 1", "price": 105, "active": true },
+        { "id": 3, "brand": "Yonex", "model": "Aerosensa 30", "price": 125, "active": true }
+      ],
+      "products": [
+        { "id": 1, "name": "น้ำเปล่า", "category": "drink", "price": 10, "active": true },
+        { "id": 2, "name": "เกลือแร่", "category": "drink", "price": 20, "active": true },
+        { "id": 3, "name": "กริปพันด้าม", "category": "equipment", "price": 60, "active": true },
+        { "id": 4, "name": "ถุงเท้าแบด", "category": "equipment", "price": 120, "active": true }
+      ],
+      "purchases": [],
+      "payments": {},
+      "paymentProofs": {},
+      "settings": {
+        "guestEntryFee": 20,
+        "annualMemberFee": 0,
+        "systemChargeMode": "per_shuttle",
+        "systemFeePerShuttle": 5,
+        "monthlySystemFee": 1500
+      },
+      "analytics": {
+        "revenueBeforeToday": { "month": 0, "year": 0 },
+        "lastSixDays": [0, 0, 0, 0, 0, 0]
+      }
+    }
+  }
+}

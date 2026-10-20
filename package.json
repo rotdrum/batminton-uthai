@@ -1,0 +1,17 @@
+{
+  "name": "bat-uthai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch server/server.mjs",
+    "start": "node server/server.mjs",
+    "check": "node --check app.js && node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
