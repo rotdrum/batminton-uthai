@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="ต้นแบบระบบจัดคิวสนามแบดมินตันอุทัยธานี เช็คอิน จัดสนาม เบิกลูก และสรุปค่าใช้จ่าย" />
+    <title>สำหรับผู้เล่น — Uthai Smash</title>
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" data-route-link="board" href="../board/index.html" target="_blank" rel="noopener" aria-label="เปิดหน้าบอร์ดคิวในแท็บใหม่">
+        <span class="brand-mark" aria-hidden="true"><span></span></span>
+        <span><strong>UTHAI</strong><small>SMASH CLUB</small></span>
+      </a>
+      <nav class="view-switcher" aria-label="เลือกหน้าจอ">
+        <a class="nav-pill" data-route-link="board" href="../board/index.html" target="_blank" rel="noopener"><span>▦</span> บอร์ดสนาม</a>
+        <a class="nav-pill" data-route-link="mobile" href="../player/index.html" target="_blank" rel="noopener"><span>⌁</span> สำหรับผู้เล่น</a>
+        <a class="nav-pill" data-route-link="admin" href="../admin/index.html" target="_blank" rel="noopener"><span>⚙</span> ผู้ดูแล</a>
+      </nav>
+      <div class="header-actions">
+        <div class="live-indicator"><i></i> LIVE</div>
+        <button class="icon-button" id="fullscreenButton" aria-label="แสดงเต็มหน้าจอ" title="เต็มหน้าจอ">⛶</button>
+      </div>
+    </header>
+    <main id="app" tabindex="-1"></main>
+    <nav class="mobile-nav" aria-label="เมนูมือถือ">
+      <a data-route-link="board" href="../board/index.html" target="_blank" rel="noopener"><span>▦</span>บอร์ด</a>
+      <a data-route-link="mobile" href="../player/index.html" target="_blank" rel="noopener"><span>⌁</span>ผู้เล่น</a>
+      <a data-route-link="admin" href="../admin/index.html" target="_blank" rel="noopener"><span>⚙</span>ผู้ดูแล</a>
+    </nav>
+    <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+    <dialog id="appDialog"><form method="dialog" class="dialog-shell" id="dialogContent"></form></dialog>
+    <script src="../app.js"></script>
+  </body>
+</html>
