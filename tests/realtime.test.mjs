@@ -79,6 +79,7 @@ test("serves the app, persists state, and broadcasts updates", async () => {
     const first = websocketClient(`ws://127.0.0.1:${port}/ws`);
     await first.opened;
     const seedSnapshot = await first.next("state:snapshot");
+    assert.equal((await first.next("presence")).clients, 1);
     assert.equal(seedSnapshot.revision, 0);
     assert.equal(seedSnapshot.data.state.courts.length, 4);
     assert.equal(seedSnapshot.data.state.members.length, 0);
@@ -95,6 +96,8 @@ test("serves the app, persists state, and broadcasts updates", async () => {
     await second.opened;
     const secondSnapshot = await second.next("state:snapshot");
     assert.equal(secondSnapshot.revision, 1);
+    assert.equal((await first.next("presence")).clients, 2);
+    assert.equal((await second.next("presence")).clients, 2);
 
     const updatedSnapshot = structuredClone(secondSnapshot.data);
     updatedSnapshot.state.members[0].checkedIn = false;
@@ -108,8 +111,9 @@ test("serves the app, persists state, and broadcasts updates", async () => {
     assert.equal(stored.schemaVersion, 1);
     assert.equal(stored.revision, 2);
     assert.equal(stored.snapshot.state.members[0].checkedIn, false);
-    first.socket.close();
     second.socket.close();
+    assert.equal((await first.next("presence")).clients, 1);
+    first.socket.close();
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await rm(temporaryDir, { recursive: true, force: true });

@@ -81,10 +81,13 @@ function sharedStateSnapshot() {
 
 function setConnectionStatus(status, label) {
   const indicator = document.querySelector("[data-realtime-status]");
-  if (!indicator) return;
-  indicator.classList.toggle("offline", status === "offline");
-  indicator.classList.toggle("syncing", status === "syncing");
-  indicator.innerHTML = `<i></i> ${label}`;
+  if (indicator) {
+    indicator.classList.toggle("offline", status === "offline");
+    indicator.classList.toggle("syncing", status === "syncing");
+    indicator.innerHTML = `<i></i> ${label}`;
+  }
+  const boardIndicator = document.querySelector("[data-board-realtime-status]");
+  if (boardIndicator) boardIndicator.textContent = status === "online" ? `● WEBSOCKET · ${realtime.clients} จอเชื่อมต่อ` : `● ${label}`;
 }
 
 function applyRealtimeSnapshot(snapshot, revision = 0) {
@@ -200,7 +203,7 @@ function systemFeeForRound(balls) { return state.settings.systemChargeMode === "
 
 function personNames(queue) {
   const players = queuePlayers(queue);
-  return `${players[0].short} · ${players[1].short} / ${players[2].short} · ${players[3].short}`;
+  return `${players[0].name} · ${players[1].name} / ${players[2].name} · ${players[3].name}`;
 }
 
 function setView(view) {
@@ -251,7 +254,7 @@ function boardView() {
     <section class="page-enter tv-board density-${queues.length} ${queueSlotCount === 10 ? "queue-layout-compact" : "queue-layout-peak"}">
       <div class="page-heading">
         <div><p class="eyebrow">สนามแบดมินตันอุทัยธานี</p><h1>บอร์ดลงคิว</h1><p>จอทีวีสำหรับดูสถานะทั้งหมด · จัดการคิวผ่านมือถือหรือหน้าผู้ดูแล</p></div>
-        <div class="clock"><span class="clock-time" id="clockTime"></span><span class="clock-date" id="clockDate"></span><span class="tv-refresh">${realtime.connected ? `● WEBSOCKET · ${realtime.clients} จอเชื่อมต่อ` : `● LOCAL · ${state.boardAutoCycle ? `ตรวจข้อมูลอีกครั้งใน` : `แสดง ${queues.length} คิว · ตรวจข้อมูลใน`} <b id="syncCount">15</b> วิ`}</span></div>
+        <div class="clock"><span class="clock-time" id="clockTime"></span><span class="clock-date" id="clockDate"></span><span class="tv-refresh" data-board-realtime-status>${realtime.connected ? `● WEBSOCKET · ${realtime.clients} จอเชื่อมต่อ` : `● LOCAL · ${state.boardAutoCycle ? `ตรวจข้อมูลอีกครั้งใน` : `แสดง ${queues.length} คิว · ตรวจข้อมูลใน`} <b id="syncCount">15</b> วิ`}</span></div>
       </div>
       <div class="tv-load-status"><span>QUEUE LOAD</span><strong>${queues.length} คิว</strong><small>${queues.length === 20 ? "ช่วงพีก · ใช้เต็มความจุ" : "ช่วงปกติ · เหลือช่องรองรับอีก 10 คิว"}</small></div>
       <div class="metric-row">
@@ -283,14 +286,14 @@ function tvQueueSlot(position, queue) {
   if (!queue) return `<div class="tv-queue-slot empty"><span class="tv-queue-index">${position}</span><span>—</span><small>ว่าง</small></div>`;
   const players = queuePlayers(queue);
   const playing = queue.status === "playing";
-  return `<div class="tv-queue-slot ${playing ? "playing" : "waiting"}"><span class="tv-queue-index">${position}</span><div><strong>${players.map((person) => person.short).join(" · ")}</strong><small>${queue.code} · มือ ${players.map((person) => person.level).join("/")}</small></div><span class="tv-queue-status">${playing ? `สนาม ${queue.courtId}` : `รอ ${minutesSince(queue.createdAt)} นาที`}</span></div>`;
+  return `<div class="tv-queue-slot ${playing ? "playing" : "waiting"}"><span class="tv-queue-index">${position}</span><div><strong>${players.map((person) => person.name).join(" · ")}</strong><small>${queue.code} · มือ ${players.map((person) => person.level).join("/")}</small></div><span class="tv-queue-status">${playing ? `สนาม ${queue.courtId}` : `รอ ${minutesSince(queue.createdAt)} นาที`}</span></div>`;
 }
 
 function tvCourtRow(court) {
   const queue = getPlayingQueue(court.id);
   if (!queue) return `<div class="tv-court-row open"><span class="tv-court-number">${court.id}</span><div><strong>${court.name}</strong><small>พร้อมรับคิวถัดไป</small></div><span class="status-pill">ว่าง</span></div>`;
   const players = queuePlayers(queue);
-  return `<div class="tv-court-row playing"><span class="tv-court-number">${court.id}</span><div><strong>${players.map((person) => person.short).join(" · ")}</strong><small>${court.name} · ${queue.code}</small></div><span class="game-time">● <span data-game-clock="${queue.id}">${minutesSince(queue.startedAt)} นาที</span></span></div>`;
+  return `<div class="tv-court-row playing"><span class="tv-court-number">${court.id}</span><div><strong>${players.map((person) => person.name).join(" · ")}</strong><small>${court.name} · ${queue.code}</small></div><span class="game-time">● <span data-game-clock="${queue.id}">${minutesSince(queue.startedAt)} นาที</span></span></div>`;
 }
 
 function tvAvailablePerson(person) {
@@ -302,7 +305,7 @@ function queueItem(queue) {
   return `
     <article class="queue-item">
       <div class="queue-line">
-        <div class="queue-number"><b>${queue.code}</b><div><strong>${players.map((person) => person.short).join(" · ")}</strong><small>รอ ${minutesSince(queue.createdAt)} นาที · ${players.map((p) => p.level).join("/")}</small></div></div>
+        <div class="queue-number"><b>${queue.code}</b><div><strong>${players.map((person) => person.name).join(" · ")}</strong><small>รอ ${minutesSince(queue.createdAt)} นาที · ${players.map((p) => p.level).join("/")}</small></div></div>
         <button class="button small secondary" data-action="assign" data-queue="${queue.id}">จัดสนาม</button>
       </div>
       <div class="queue-players">${players.map((person) => initialsAvatar(person)).join("")}<span class="avatar more">4</span></div>
