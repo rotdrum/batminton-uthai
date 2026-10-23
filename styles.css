@@ -462,7 +462,6 @@ main:has(.tv-board) { width: 100%; max-width: 1800px; padding-top: 18px; padding
 .admin-login-form label { font-size: 11px; font-weight: 700; }
 .admin-login-form input { width: 100%; border: 1px solid var(--line); border-radius: 13px; padding: 12px 14px; color: var(--ink); background: #fafaf6; font: 800 24px/1 Manrope, sans-serif; letter-spacing: .45em; text-align: center; }
 .admin-login-form small { min-height: 18px; color: #ad4934; font-size: 10px; }
-.admin-pin-hint { display: flex; justify-content: space-between; gap: 10px; margin-top: 16px; padding: 11px 12px; border-radius: 12px; color: #526124; background: #f0f8d3; font-size: 11px; }
 .admin-content { min-width: 0; }
 .admin-content .page-heading { margin-bottom: 18px; }
 .admin-content .page-heading h1 { font-size: 30px; }

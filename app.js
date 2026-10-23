@@ -477,7 +477,6 @@ function adminLoginView() {
           <small id="adminLoginError" aria-live="polite"></small>
           <button class="button block" type="submit">เข้าสู่ระบบ →</button>
         </form>
-        <div class="admin-pin-hint"><strong>PIN เริ่มต้น</strong><span>8888</span></div>
       </div>
     </section>`;
 }
