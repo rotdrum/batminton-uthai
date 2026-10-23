@@ -1512,6 +1512,15 @@ function closePlayerPicker(picker) {
   picker.querySelector(".ball-player-search")?.setAttribute("aria-expanded", "false");
 }
 
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.isComposing || event.defaultPrevented || !dialog.open) return;
+  if (!event.target.matches("input, select")) return;
+  const primaryButton = dialogContent.querySelector(".dialog-footer [data-action]:not(:disabled)");
+  if (!primaryButton) return;
+  event.preventDefault();
+  primaryButton.click();
+});
+
 document.addEventListener("click", (event) => {
   if (!event.target.closest(".player-picker")) document.querySelectorAll(".player-picker.open").forEach(closePlayerPicker);
   const adminButton = event.target.closest("[data-admin-tab]");
