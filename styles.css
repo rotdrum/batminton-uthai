@@ -515,6 +515,8 @@ main:has(.tv-board) { width: 100%; max-width: 1800px; padding-top: 18px; padding
 .admin-grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 14px; }
 .ball-create-panel, .purchase-create-panel { max-width: 920px; }
 .ball-rounds-panel, .purchase-rounds-panel { overflow: hidden; }
+.pending-ball-panel { margin-bottom: 14px; overflow: hidden; border-color: #dce7b1; }
+.pending-ball-table { min-width: 640px; }
 .admin-table-wrap { width: 100%; overflow-x: auto; padding: 0 16px 18px; }
 .admin-table { width: 100%; min-width: 980px; border-collapse: collapse; font-size: 12px; }
 .admin-table th { padding: 10px 9px; border-bottom: 1px solid #dfe4db; color: var(--muted); background: #f7f8f3; font-size: 9px; font-weight: 800; letter-spacing: .05em; text-align: left; text-transform: uppercase; white-space: nowrap; }

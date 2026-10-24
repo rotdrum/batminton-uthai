@@ -16,6 +16,8 @@ const state = {
   view: ["board", "mobile", "admin"].includes(requestedView) ? requestedView : "board",
   adminTab: ["overview", "balls", "shop", "payments", "people", "masters"].includes(requestedAdminTab) ? requestedAdminTab : "overview",
   ballAdminMode: "list",
+  ballDraftQueueId: null,
+  ballDraftPlayerIds: [],
   shopAdminMode: "list",
   dashboardPeriod: "day",
   boardQueueCount: [10, 20].includes(requestedBoardQueueCount) ? requestedBoardQueueCount : 10,
@@ -623,6 +625,8 @@ function ballsAdmin() {
   const filter = state.adminFilters.balls;
   const activeShuttles = state.shuttles.filter((item) => item.active);
   const selectedShuttle = activeShuttles[0];
+  const draftQueue = state.queues.find((queue) => queue.id === state.ballDraftQueueId);
+  const pendingQueues = activePlayingQueues().filter((queue) => !state.ballRounds.some((round) => round.queueId === queue.id));
   const rounds = state.ballRounds.filter((round) => matchesAdminDate(round.createdAt, filter.date) && adminSearchMatch([
     round.shuttleName || shuttleLabel(shuttle(round.shuttleId)),
     ...round.playerIds.map((id) => member(id)?.name),
@@ -635,9 +639,9 @@ function ballsAdmin() {
   const firstSystemFee = systemFeeForRound(1);
   if (state.ballAdminMode === "add") return `
     <div class="page-heading"><div><p class="eyebrow">ห้องเบิกลูก · เพิ่มรายการ</p><h1>เบิกลูกเกมใหม่</h1><p>ผู้เล่นคนเดิมเลือกซ้ำได้ หากออกค่าลูกหรือเลี้ยงให้อีกคน</p></div><button class="button secondary" data-action="set-ball-mode" data-mode="list">← กลับตารางรายการ</button></div>
-    <section class="panel picker-panel ball-create-panel"><div class="panel-header"><div><h2>ข้อมูลเกมและผู้รับผิดชอบค่าใช้จ่าย</h2><p>ค้นหาด้วยชื่อหรือเบอร์ · เลือกให้ครบ 4 ช่อง · ชื่อซ้ำจะคิดค่าใช้จ่ายตามจำนวนช่อง</p></div><span class="badge blue">CREATE</span></div>
+    <section class="panel picker-panel ball-create-panel"><div class="panel-header"><div><h2>ข้อมูลเกมและผู้รับผิดชอบค่าใช้จ่าย</h2><p>${draftQueue ? `${draftQueue.code} · สนาม ${draftQueue.courtId} · เติมรายชื่อจากเกมที่กำลังเล่นแล้ว` : "ค้นหาด้วยชื่อหรือเบอร์ · เลือกให้ครบ 4 ช่อง · ชื่อซ้ำจะคิดค่าใช้จ่ายตามจำนวนช่อง"}</p></div><span class="badge blue">CREATE</span></div>
       <div class="ball-form">
-        <div class="field"><label>ผู้เล่น / ผู้รับผิดชอบค่าใช้จ่าย 4 ช่อง</label><div class="four-selects">${[0,1,2,3].map(ballPlayerPicker).join("")}</div><small class="field-help">กรณีคนหนึ่งออกค่าใช้จ่ายให้อีกคน สามารถเลือกชื่อเดิมซ้ำได้</small></div>
+        <div class="field"><label>ผู้เล่น / ผู้รับผิดชอบค่าใช้จ่าย 4 ช่อง</label><div class="four-selects">${[0,1,2,3].map((index) => ballPlayerPicker(index, state.ballDraftPlayerIds[index])).join("")}</div><small class="field-help">กรณีคนหนึ่งออกค่าใช้จ่ายให้อีกคน สามารถเลือกชื่อเดิมซ้ำได้</small></div>
         <div class="shop-form-row"><div class="field"><label for="ballShuttle">ยี่ห้อ / รุ่นลูกแบด</label><select id="ballShuttle">${activeShuttles.map((item) => `<option value="${item.id}">${shuttleLabel(item)} · ฿${formatMoney(item.price)}/ลูก</option>`).join("")}</select></div><div class="field"><label for="ballCount">จำนวนที่เบิก</label><select id="ballCount">${[1,2,3].map((count) => `<option value="${count}">${count} ลูก</option>`).join("")}</select></div></div>
         <div class="cost-box" id="costPreview"><div class="cost-line"><span>${selectedShuttle ? shuttleLabel(selectedShuttle) : "ไม่มีลูกแบดที่เปิดใช้"}</span><strong class="money">฿${formatMoney(firstBallCost)}</strong></div><div class="cost-line"><span>ค่าระบบ · ${systemFeeLabel()}</span><strong class="money">฿${formatMoney(firstSystemFee)}</strong></div><div class="cost-line total"><span>รวม / หาร 4 ช่อง</span><strong class="money">฿${formatMoney((firstBallCost + firstSystemFee) / 4)} ต่อช่อง</strong></div></div>
         <button class="button block" data-action="issue-ball" ${selectedShuttle ? "" : "disabled"}>ยืนยันเบิกลูกและบันทึกเกม</button>
@@ -645,6 +649,7 @@ function ballsAdmin() {
     </section>`;
   return `
     <div class="page-heading"><div><p class="eyebrow">ห้องเบิกลูก · จัดการรายการ</p><h1>ตารางเบิกลูกทั้งหมด</h1><p>ค้นหา ตรวจสอบ แก้ผู้เล่น ราคา จำนวน หรือเวลาย้อนหลังได้</p></div><button class="button" data-action="set-ball-mode" data-mode="add">＋ เพิ่มเกมใหม่</button></div>
+    ${pendingQueues.length ? `<section class="panel pending-ball-panel"><div class="panel-header"><div><h2>เกมในสนามที่รอเบิกลูก</h2><p>กดเลือกเกมเพื่อเติมรายชื่อผู้เล่นทั้ง 4 คนในหน้า Create</p></div><span class="badge warning">รอ ${pendingQueues.length} เกม</span></div><div class="admin-table-wrap"><table class="admin-table pending-ball-table"><thead><tr><th>คิว / สนาม</th><th>ผู้เล่น 4 คน</th><th>เริ่มเล่น</th><th>จัดการ</th></tr></thead><tbody>${pendingQueues.map((queue) => `<tr><td><strong>${queue.code} · สนาม ${queue.courtId}</strong></td><td><div class="table-player-list">${queue.playerIds.map((id, index) => `<span>${index + 1}. ${member(id)?.short || "ไม่พบชื่อ"}</span>`).join("")}</div></td><td>${new Date(queue.startedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</td><td><button class="button small" data-action="create-ball-from-queue" data-queue="${queue.id}">เบิกลูกเกมนี้</button></td></tr>`).join("")}</tbody></table></div></section>` : ""}
     <section class="panel ball-rounds-panel"><div class="panel-header"><div><h2>ประวัติเบิกลูก</h2><p>พบ ${rounds.length} รายการจากตัวกรอง</p></div><span class="badge success">CRUD</span></div>
       ${adminFilterBar("balls", { sortOptions: [["newest", "ล่าสุดก่อน"], ["oldest", "เก่าสุดก่อน"], ["amount_desc", "ยอดสูงสุด"]] })}
       <div class="admin-table-wrap"><table class="admin-table ball-rounds-table"><thead><tr><th>เกม / วันเวลา</th><th>ผู้เล่น / ผู้จ่าย 4 ช่อง</th><th>ลูกแบด</th><th>จำนวน</th><th>ราคาต่อลูก</th><th>ค่าระบบ</th><th>รวม</th><th>จัดการ</th></tr></thead><tbody>${rounds.map((round) => { const total = round.balls * round.ballCost + round.fee; return `<tr><td><strong>#${String(round.id).padStart(2,"0")}</strong><small>${new Date(round.createdAt).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })} · ${new Date(round.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</small></td><td><div class="table-player-list">${round.playerIds.map((id, index) => `<span>${index + 1}. ${member(id)?.short || "ไม่พบชื่อ"}</span>`).join("")}</div></td><td>${round.shuttleName || shuttleLabel(shuttle(round.shuttleId))}</td><td>${round.balls} ลูก</td><td class="money">฿${formatMoney(round.ballCost)}</td><td class="money">฿${formatMoney(round.fee)}</td><td><strong class="money">฿${formatMoney(total)}</strong><small>฿${formatMoney(total / 4)}/ช่อง</small></td><td><div class="table-actions"><button class="button small secondary" data-action="edit-ball-round" data-round="${round.id}">แก้ไข</button><button class="button small coral" data-action="show-delete-ball-round" data-round="${round.id}">ลบ</button></div></td></tr>`; }).join("") || `<tr><td colspan="8"><div class="empty-state">ไม่พบรายการตามวันที่หรือคำค้น</div></td></tr>`}</tbody></table></div>
@@ -1297,6 +1302,16 @@ function handleAction(button) {
   if (action === "save-member") saveNewMember();
   if (action === "set-ball-mode") {
     state.ballAdminMode = button.dataset.mode === "add" ? "add" : "list";
+    state.ballDraftQueueId = null;
+    state.ballDraftPlayerIds = [];
+    render();
+  }
+  if (action === "create-ball-from-queue") {
+    const queue = state.queues.find((item) => item.id === Number(button.dataset.queue) && item.status === "playing");
+    if (!queue) return showToast("เกมนี้ไม่ได้อยู่ในสนามแล้ว");
+    state.ballDraftQueueId = queue.id;
+    state.ballDraftPlayerIds = [...queue.playerIds];
+    state.ballAdminMode = "add";
     render();
   }
   if (action === "issue-ball") issueBallRound();
@@ -1484,9 +1499,11 @@ function issueBallRound() {
   if (!selectedShuttle?.active) return showToast("กรุณาเลือกยี่ห้อลูกแบดที่เปิดใช้งาน");
   const id = Math.max(0, ...state.ballRounds.map((round) => round.id)) + 1;
   const fee = systemFeeForRound(balls);
-  state.ballRounds.push({ id, playerIds: ids, balls, shuttleId: selectedShuttle.id, shuttleName: shuttleLabel(selectedShuttle), ballCost: selectedShuttle.price, fee, createdAt: Date.now() });
+  state.ballRounds.push({ id, queueId: state.ballDraftQueueId, playerIds: ids, balls, shuttleId: selectedShuttle.id, shuttleName: shuttleLabel(selectedShuttle), ballCost: selectedShuttle.price, fee, createdAt: Date.now() });
   ids.forEach((personId) => { state.payments[personId] = false; });
   state.ballAdminMode = "list";
+  state.ballDraftQueueId = null;
+  state.ballDraftPlayerIds = [];
   render();
   showToast(`บันทึกเกม #${String(id).padStart(2, "0")} · ${shuttleLabel(selectedShuttle)} · ช่องละ ฿${formatMoney((balls * selectedShuttle.price + fee) / 4)}`);
 }
