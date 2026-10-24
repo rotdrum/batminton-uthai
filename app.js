@@ -49,7 +49,7 @@ const state = {
   purchases: [],
   payments: {},
   paymentProofs: {},
-  settings: { guestEntryFee: 20, annualMemberFee: 0, systemChargeMode: "per_shuttle", systemFeePerShuttle: 5, monthlySystemFee: 1500 },
+  settings: { guestEntryFee: 20, annualMemberFee: 0, systemChargeMode: "free", systemFeePerShuttle: 5, monthlySystemFee: 1500 },
   adminFilters: {
     balls: { date: "today", query: "", sort: "newest" },
     shop: { date: "today", query: "", sort: "newest" },
@@ -200,8 +200,18 @@ function localDateTimeValue(timestamp) {
   const date = new Date(timestamp);
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
-function systemFeeLabel() { return state.settings.systemChargeMode === "per_shuttle" ? `ลูกละ ฿${formatMoney(state.settings.systemFeePerShuttle)}` : `เหมาจ่าย ฿${formatMoney(state.settings.monthlySystemFee)}/เดือน`; }
-function systemFeeForRound(balls) { return state.settings.systemChargeMode === "per_shuttle" ? balls * state.settings.systemFeePerShuttle : 0; }
+function systemFeeLabel() {
+  if (state.settings.systemChargeMode === "per_shuttle") return `ลูกละ ฿${formatMoney(state.settings.systemFeePerShuttle)}`;
+  if (state.settings.systemChargeMode === "monthly") return `เหมาจ่าย ฿${formatMoney(state.settings.monthlySystemFee)}/เดือน`;
+  return "ฟรี";
+}
+function systemChargeModeName() {
+  if (state.settings.systemChargeMode === "per_shuttle") return "คิดต่อลูก";
+  if (state.settings.systemChargeMode === "monthly") return "รายเดือน";
+  return "ฟรี";
+}
+function developerFeeForRound(balls) { return state.settings.systemChargeMode === "per_shuttle" ? balls * state.settings.systemFeePerShuttle : 0; }
+function roundDeveloperFee(round) { return Number(round.developerFee ?? round.fee) || 0; }
 
 function personNames(queue) {
   const players = queuePlayers(queue);
@@ -524,7 +534,7 @@ function overviewAdmin() {
       <div class="stat-card featured"><div class="stat-icon">฿</div><strong>${formatMoney(metrics.today)}</strong><small>รายรับวันนี้</small><span>จาก ${metrics.games} เกม</span></div>
       <div class="stat-card"><div class="stat-icon">30</div><strong>${formatMoney(metrics.month)}</strong><small>รายรับเดือนนี้</small><span>รวมยอดวันนี้แล้ว</span></div>
       <div class="stat-card"><div class="stat-icon">ปี</div><strong>${formatMoney(metrics.year)}</strong><small>รายรับปีนี้</small><span>ข้อมูลสะสมทั้งปี</span></div>
-      <div class="stat-card"><div class="stat-icon">🏸</div><strong>${metrics.balls}</strong><small>ลูกที่เบิกวันนี้</small><span>${metrics.games} เกม · ค่าระบบ ${systemFeeLabel()}</span></div>
+      <div class="stat-card"><div class="stat-icon">🏸</div><strong>${metrics.balls}</strong><small>ลูกที่เบิกวันนี้</small><span>${metrics.games} เกม · แผนค่าระบบ ${systemFeeLabel()}</span></div>
     </div>
     <div class="dashboard-grid">
       <section class="panel revenue-panel"><div class="panel-header"><div><h2>${report.title}</h2><p>สลับช่วงเวลาเพื่อดูภาพรวมรายวัน รายเดือน และรายปี</p></div><span class="badge success">รวม ฿${formatMoney(report.total)}</span></div>
@@ -532,11 +542,11 @@ function overviewAdmin() {
       </section>
       <section class="panel dashboard-summary"><div class="panel-header"><div><h2>เงินวันนี้มาจากไหน</h2><p>รวมทุกช่องทางไว้ในหน้าเดียว</p></div></div>
         <div class="breakdown-list">
-          ${dashboardBreakdownRow("ค่าลูกและค่าระบบตามการใช้", metrics.ballRevenue, metrics.today)}
+          ${dashboardBreakdownRow("ค่าลูกแบด", metrics.ballRevenue, metrics.today)}
           ${dashboardBreakdownRow("ค่าเข้าบุคคลภายนอก", metrics.entryRevenue, metrics.today)}
           ${dashboardBreakdownRow("น้ำและอุปกรณ์", metrics.shopRevenue, metrics.today)}
         </div>
-        <div class="developer-fee-box"><div><small>ยอดค่าระบบส่งผู้พัฒนา</small><strong>฿${formatMoney(metrics.developerFeeDue)}</strong><span>${state.settings.systemChargeMode === "per_shuttle" ? `${metrics.balls} ลูก × ฿${formatMoney(state.settings.systemFeePerShuttle)}` : "เหมาจ่ายประจำเดือนนี้"}</span></div><button class="button small secondary" data-action="goto-admin" data-tab="masters">ตั้งค่าวิธีคิด</button></div>
+        <div class="developer-fee-box"><div><small>ยอดสะสมที่ต้องจ่ายผู้พัฒนา</small><strong>฿${formatMoney(metrics.developerFeeDue)}</strong><span>${metrics.developerFeeDescription}</span></div><button class="button small secondary" data-action="goto-admin" data-tab="masters">ตั้งค่าวิธีคิด</button></div>
         <div class="outstanding-box"><div><small>ยอดยังไม่ชำระ</small><strong>฿${formatMoney(metrics.outstanding)}</strong><span>${metrics.debtors} คน · ดาวน์โหลดรูปส่ง Line ได้</span></div><button class="button small coral" data-action="goto-admin" data-tab="payments">ไปหน้าชำระเงิน</button></div>
       </section>
     </div>
@@ -632,18 +642,18 @@ function ballsAdmin() {
     ...round.playerIds.map((id) => member(id)?.name),
   ], filter.query)).sort((a, b) => {
     if (filter.sort === "oldest") return a.createdAt - b.createdAt;
-    if (filter.sort === "amount_desc") return (b.balls * b.ballCost + b.fee) - (a.balls * a.ballCost + a.fee);
+    if (filter.sort === "amount_desc") return (b.balls * b.ballCost) - (a.balls * a.ballCost);
     return b.createdAt - a.createdAt;
   });
   const firstBallCost = selectedShuttle?.price || 0;
-  const firstSystemFee = systemFeeForRound(1);
+  const firstDeveloperFee = developerFeeForRound(1);
   if (state.ballAdminMode === "add") return `
     <div class="page-heading"><div><p class="eyebrow">ห้องเบิกลูก · เพิ่มรายการ</p><h1>เบิกลูกเกมใหม่</h1><p>ผู้เล่นคนเดิมเลือกซ้ำได้ หากออกค่าลูกหรือเลี้ยงให้อีกคน</p></div><button class="button secondary" data-action="set-ball-mode" data-mode="list">← กลับตารางรายการ</button></div>
     <section class="panel picker-panel ball-create-panel"><div class="panel-header"><div><h2>ข้อมูลเกมและผู้รับผิดชอบค่าใช้จ่าย</h2><p>${draftQueue ? `${draftQueue.code} · สนาม ${draftQueue.courtId} · เติมรายชื่อจากเกมที่กำลังเล่นแล้ว` : "ค้นหาด้วยชื่อหรือเบอร์ · เลือกให้ครบ 4 ช่อง · ชื่อซ้ำจะคิดค่าใช้จ่ายตามจำนวนช่อง"}</p></div><span class="badge blue">CREATE</span></div>
       <div class="ball-form">
         <div class="field"><label>ผู้เล่น / ผู้รับผิดชอบค่าใช้จ่าย 4 ช่อง</label><div class="four-selects">${[0,1,2,3].map((index) => ballPlayerPicker(index, state.ballDraftPlayerIds[index])).join("")}</div><small class="field-help">กรณีคนหนึ่งออกค่าใช้จ่ายให้อีกคน สามารถเลือกชื่อเดิมซ้ำได้</small></div>
         <div class="shop-form-row"><div class="field"><label for="ballShuttle">ยี่ห้อ / รุ่นลูกแบด</label><select id="ballShuttle">${activeShuttles.map((item) => `<option value="${item.id}">${shuttleLabel(item)} · ฿${formatMoney(item.price)}/ลูก</option>`).join("")}</select></div><div class="field"><label for="ballCount">จำนวนที่เบิก</label><select id="ballCount">${[1,2,3].map((count) => `<option value="${count}">${count} ลูก</option>`).join("")}</select></div></div>
-        <div class="cost-box" id="costPreview"><div class="cost-line"><span>${selectedShuttle ? shuttleLabel(selectedShuttle) : "ไม่มีลูกแบดที่เปิดใช้"}</span><strong class="money">฿${formatMoney(firstBallCost)}</strong></div><div class="cost-line"><span>ค่าระบบ · ${systemFeeLabel()}</span><strong class="money">฿${formatMoney(firstSystemFee)}</strong></div><div class="cost-line total"><span>รวม / หาร 4 ช่อง</span><strong class="money">฿${formatMoney((firstBallCost + firstSystemFee) / 4)} ต่อช่อง</strong></div></div>
+        <div class="cost-box" id="costPreview"><div class="cost-line"><span>${selectedShuttle ? shuttleLabel(selectedShuttle) : "ไม่มีลูกแบดที่เปิดใช้"}</span><strong class="money">฿${formatMoney(firstBallCost)}</strong></div><div class="cost-line"><span>ยอดผู้พัฒนาแยก · ${systemFeeLabel()}</span><strong class="money">฿${formatMoney(firstDeveloperFee)}</strong></div><div class="cost-line total"><span>ค่าลูก / หาร 4 ช่อง</span><strong class="money">฿${formatMoney(firstBallCost / 4)} ต่อช่อง</strong></div></div>
         <button class="button block" data-action="issue-ball" ${selectedShuttle ? "" : "disabled"}>ยืนยันเบิกลูกและบันทึกเกม</button>
       </div>
     </section>`;
@@ -652,7 +662,7 @@ function ballsAdmin() {
     ${pendingQueues.length ? `<section class="panel pending-ball-panel"><div class="panel-header"><div><h2>เกมในสนามที่รอเบิกลูก</h2><p>กดเลือกเกมเพื่อเติมรายชื่อผู้เล่นทั้ง 4 คนในหน้า Create</p></div><span class="badge warning">รอ ${pendingQueues.length} เกม</span></div><div class="admin-table-wrap"><table class="admin-table pending-ball-table"><thead><tr><th>คิว / สนาม</th><th>ผู้เล่น 4 คน</th><th>เริ่มเล่น</th><th>จัดการ</th></tr></thead><tbody>${pendingQueues.map((queue) => `<tr><td><strong>${queue.code} · สนาม ${queue.courtId}</strong></td><td><div class="table-player-list">${queue.playerIds.map((id, index) => `<span>${index + 1}. ${member(id)?.short || "ไม่พบชื่อ"}</span>`).join("")}</div></td><td>${new Date(queue.startedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</td><td><button class="button small" data-action="create-ball-from-queue" data-queue="${queue.id}">เบิกลูกเกมนี้</button></td></tr>`).join("")}</tbody></table></div></section>` : ""}
     <section class="panel ball-rounds-panel"><div class="panel-header"><div><h2>ประวัติเบิกลูก</h2><p>พบ ${rounds.length} รายการจากตัวกรอง</p></div><span class="badge success">CRUD</span></div>
       ${adminFilterBar("balls", { sortOptions: [["newest", "ล่าสุดก่อน"], ["oldest", "เก่าสุดก่อน"], ["amount_desc", "ยอดสูงสุด"]] })}
-      <div class="admin-table-wrap"><table class="admin-table ball-rounds-table"><thead><tr><th>เกม / วันเวลา</th><th>ผู้เล่น / ผู้จ่าย 4 ช่อง</th><th>ลูกแบด</th><th>จำนวน</th><th>ราคาต่อลูก</th><th>ค่าระบบ</th><th>รวม</th><th>จัดการ</th></tr></thead><tbody>${rounds.map((round) => { const total = round.balls * round.ballCost + round.fee; return `<tr><td><strong>#${String(round.id).padStart(2,"0")}</strong><small>${new Date(round.createdAt).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })} · ${new Date(round.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</small></td><td><div class="table-player-list">${round.playerIds.map((id, index) => `<span>${index + 1}. ${member(id)?.short || "ไม่พบชื่อ"}</span>`).join("")}</div></td><td>${round.shuttleName || shuttleLabel(shuttle(round.shuttleId))}</td><td>${round.balls} ลูก</td><td class="money">฿${formatMoney(round.ballCost)}</td><td class="money">฿${formatMoney(round.fee)}</td><td><strong class="money">฿${formatMoney(total)}</strong><small>฿${formatMoney(total / 4)}/ช่อง</small></td><td><div class="table-actions"><button class="button small secondary" data-action="edit-ball-round" data-round="${round.id}">แก้ไข</button><button class="button small coral" data-action="show-delete-ball-round" data-round="${round.id}">ลบ</button></div></td></tr>`; }).join("") || `<tr><td colspan="8"><div class="empty-state">ไม่พบรายการตามวันที่หรือคำค้น</div></td></tr>`}</tbody></table></div>
+      <div class="admin-table-wrap"><table class="admin-table ball-rounds-table"><thead><tr><th>เกม / วันเวลา</th><th>ผู้เล่น / ผู้จ่าย 4 ช่อง</th><th>ลูกแบด</th><th>จำนวน</th><th>ราคาต่อลูก</th><th>ยอดผู้พัฒนา</th><th>ค่าลูกรวม</th><th>จัดการ</th></tr></thead><tbody>${rounds.map((round) => { const total = round.balls * round.ballCost; return `<tr><td><strong>#${String(round.id).padStart(2,"0")}</strong><small>${new Date(round.createdAt).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })} · ${new Date(round.createdAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}</small></td><td><div class="table-player-list">${round.playerIds.map((id, index) => `<span>${index + 1}. ${member(id)?.short || "ไม่พบชื่อ"}</span>`).join("")}</div></td><td>${round.shuttleName || shuttleLabel(shuttle(round.shuttleId))}</td><td>${round.balls} ลูก</td><td class="money">฿${formatMoney(round.ballCost)}</td><td class="money">฿${formatMoney(roundDeveloperFee(round))}</td><td><strong class="money">฿${formatMoney(total)}</strong><small>฿${formatMoney(total / 4)}/ช่อง</small></td><td><div class="table-actions"><button class="button small secondary" data-action="edit-ball-round" data-round="${round.id}">แก้ไข</button><button class="button small coral" data-action="show-delete-ball-round" data-round="${round.id}">ลบ</button></div></td></tr>`; }).join("") || `<tr><td colspan="8"><div class="empty-state">ไม่พบรายการตามวันที่หรือคำค้น</div></td></tr>`}</tbody></table></div>
     </section>`;
 }
 
@@ -706,7 +716,7 @@ function getPaymentTotals() {
     purchaseByPerson[person.id] = 0;
   });
   state.ballRounds.forEach((round) => {
-    const share = (round.balls * round.ballCost + round.fee) / 4;
+    const share = round.balls * round.ballCost / 4;
     round.playerIds.forEach((id) => { byPerson[id] = (byPerson[id] || 0) + share; });
   });
   state.purchases.forEach((purchase) => {
@@ -734,11 +744,16 @@ function getDebtRows(personId = null) {
 
 function getDashboardMetrics() {
   const totals = getPaymentTotals();
-  const ballRevenue = state.ballRounds.reduce((sum, round) => sum + round.balls * round.ballCost + round.fee, 0);
+  const ballRevenue = state.ballRounds.reduce((sum, round) => sum + round.balls * round.ballCost, 0);
   const balls = state.ballRounds.reduce((sum, round) => sum + round.balls, 0);
-  const developerFeeDue = state.settings.systemChargeMode === "per_shuttle"
-    ? state.ballRounds.reduce((sum, round) => sum + round.fee, 0)
-    : state.settings.monthlySystemFee;
+  const perShuttleDeveloperFee = state.ballRounds.reduce((sum, round) => sum + roundDeveloperFee(round), 0);
+  const monthlyDeveloperFee = state.settings.systemChargeMode === "monthly" ? state.settings.monthlySystemFee : 0;
+  const developerFeeDue = perShuttleDeveloperFee + monthlyDeveloperFee;
+  const developerFeeDescription = state.settings.systemChargeMode === "monthly"
+    ? `ยอดต่อลูกสะสม ฿${formatMoney(perShuttleDeveloperFee)} + เหมาจ่ายเดือนนี้`
+    : perShuttleDeveloperFee
+      ? "สะสมจากเกมที่เลือกคิดค่าระบบต่อลูก"
+      : state.settings.systemChargeMode === "free" ? "โหมดฟรี · ไม่เกิดยอดใหม่" : "ยังไม่มีการเบิกลูก";
   const outstanding = getDebtRows().reduce((sum, row) => sum + row.total, 0);
   const labels = ["14 ต.ค.", "15 ต.ค.", "16 ต.ค.", "17 ต.ค.", "18 ต.ค.", "19 ต.ค.", "วันนี้"];
   const values = [...state.analytics.lastSixDays, totals.grand];
@@ -750,6 +765,7 @@ function getDashboardMetrics() {
     games: state.ballRounds.length,
     balls,
     developerFeeDue,
+    developerFeeDescription,
     ballRevenue,
     entryRevenue: totals.entryTotal,
     shopRevenue: totals.purchaseTotal,
@@ -850,9 +866,9 @@ function paymentsAdmin() {
       <div class="stat-card"><div class="stat-icon">฿</div><strong>${formatMoney(totals.grand)}</strong><small>ยอดเรียกเก็บ</small></div>
       <div class="stat-card"><div class="stat-icon">✓</div><strong>${formatMoney(received)}</strong><small>รับแล้ว</small></div>
       <div class="stat-card"><div class="stat-icon">◷</div><strong>${formatMoney(totals.grand - received)}</strong><small>รอชำระ</small></div>
-      <div class="stat-card"><div class="stat-icon">▤</div><strong>${formatMoney(totals.purchaseTotal)}</strong><small>ยอดขายน้ำ / อุปกรณ์ · ค่าระบบ ฿${formatMoney(state.ballRounds.reduce((sum, round) => sum + round.fee, 0))}</small></div>
+      <div class="stat-card"><div class="stat-icon">▤</div><strong>${formatMoney(totals.purchaseTotal)}</strong><small>ยอดขายน้ำ / อุปกรณ์ · ยอดผู้พัฒนาแยก ฿${formatMoney(getDashboardMetrics().developerFeeDue)}</small></div>
     </div>
-    <section class="panel"><div class="panel-header"><div><h2>สรุปรายคน</h2><p>พบ ${debtors.length} คน · รวมค่าลูก ค่าระบบ ค่าเข้า และรายการซื้อ</p></div></div>${adminFilterBar("payments", { sortOptions: [["amount_desc", "ยอดสูงสุด"], ["name_asc", "ชื่อ ก–ฮ"], ["paid_first", "ชำระแล้วก่อน"]] })}<div class="data-list">
+    <section class="panel"><div class="panel-header"><div><h2>สรุปรายคน</h2><p>พบ ${debtors.length} คน · รวมค่าลูก ค่าเข้า และรายการซื้อ (ไม่รวมยอดผู้พัฒนา)</p></div></div>${adminFilterBar("payments", { sortOptions: [["amount_desc", "ยอดสูงสุด"], ["name_asc", "ชื่อ ก–ฮ"], ["paid_first", "ชำระแล้วก่อน"]] })}<div class="data-list">
       <div class="data-row head"><span>ผู้เล่น</span><span>รายการวันนี้</span><span>ยอดวันนี้</span><span>สถานะ</span></div>
       ${debtors.map((person) => {
         const games = state.ballRounds.filter((round) => round.playerIds.includes(person.id)).length;
@@ -894,7 +910,7 @@ function mastersAdmin() {
       <section class="panel master-panel"><div class="panel-header"><div><h2>Master ระดับมือ</h2><p>${Object.keys(LEVELS).length} ระดับ · ใช้กับสมาชิกและการจัดเกม</p></div><button class="button small" data-action="show-master-form" data-kind="level">＋ เพิ่ม</button></div><div class="data-list level-guide">${Object.entries(LEVELS).map(([code, item]) => `<div class="level-item master-level"><span class="level-big">${code}</span><div><strong>${item.label}</strong><small>${item.description}</small></div><div class="master-actions"><button class="button small secondary" data-action="show-master-form" data-kind="level" data-key="${code}">แก้ไข</button><button class="button small coral" data-action="show-delete-master" data-kind="level" data-key="${code}">ลบ</button></div></div>`).join("")}</div></section>
       <section class="panel master-panel"><div class="panel-header"><div><h2>Master ลูกแบดขนไก่</h2><p>${state.shuttles.length} ยี่ห้อ / รุ่น · เลือกได้ตอนเบิกลูก</p></div><button class="button small" data-action="show-master-form" data-kind="shuttle">＋ เพิ่ม</button></div><div class="data-list">${state.shuttles.map((item) => `<div class="master-court product-master"><div><strong>${shuttleLabel(item)}</strong><small>ราคาต่อลูก · ${item.active ? "เปิดให้เบิก" : "ปิดชั่วคราว"}</small></div><strong class="money">฿${formatMoney(item.price)}</strong><div class="master-actions"><button class="toggle ${item.active ? "on" : ""}" data-action="toggle-shuttle" data-shuttle="${item.id}" aria-label="เปิดปิด ${shuttleLabel(item)}"></button><button class="button small secondary" data-action="show-master-form" data-kind="shuttle" data-key="${item.id}">แก้ไข</button><button class="button small coral" data-action="show-delete-master" data-kind="shuttle" data-key="${item.id}">ลบ</button></div></div>`).join("")}</div></section>
       <section class="panel master-panel"><div class="panel-header"><div><h2>Master น้ำ / อุปกรณ์</h2><p>${state.products.length} รายการ · ใช้ในเมนูซื้อของ</p></div><button class="button small" data-action="show-master-form" data-kind="product">＋ เพิ่ม</button></div><div class="data-list">${state.products.map((item) => `<div class="master-court product-master"><div><strong>${item.name}</strong><small>${productCategoryName(item)} · ${item.active ? "เปิดขาย" : "ปิดขาย"}</small></div><strong class="money">฿${formatMoney(item.price)}</strong><div class="master-actions"><button class="toggle ${item.active ? "on" : ""}" data-action="toggle-product" data-product="${item.id}" aria-label="เปิดปิด ${item.name}"></button><button class="button small secondary" data-action="show-master-form" data-kind="product" data-key="${item.id}">แก้ไข</button><button class="button small coral" data-action="show-delete-master" data-kind="product" data-key="${item.id}">ลบ</button></div></div>`).join("")}</div></section>
-      <section class="panel system-plan-panel"><div class="panel-header"><div><h2>ค่าระบบที่จ่ายให้ผู้พัฒนา</h2><p>เลือกใช้งานเพียง 1 รูปแบบ</p></div><span class="badge success">กำลังใช้: ${state.settings.systemChargeMode === "per_shuttle" ? "คิดต่อลูก" : "รายเดือน"}</span></div><div class="system-plan-options"><button class="system-plan-option ${state.settings.systemChargeMode === "per_shuttle" ? "selected" : ""}" type="button" data-action="select-system-charge-mode" data-mode="per_shuttle"><span class="system-plan-radio"></span><div><strong>คิดตามลูกที่เบิก</strong><small>หักส่งลูกละ ฿${formatMoney(state.settings.systemFeePerShuttle)}</small></div></button><button class="system-plan-option ${state.settings.systemChargeMode === "monthly" ? "selected" : ""}" type="button" data-action="select-system-charge-mode" data-mode="monthly"><span class="system-plan-radio"></span><div><strong>เหมาจ่ายรายเดือน</strong><small>จ่าย ฿${formatMoney(state.settings.monthlySystemFee)} ต่อเดือน</small></div></button></div><div class="system-plan-footer"><span>${state.settings.systemChargeMode === "per_shuttle" ? "ค่าระบบรวมในแต่ละเกมและหารผู้เล่น 4 คน" : "ไม่บวกค่าระบบในยอดผู้เล่นแต่ละเกม"}</span><button class="button small secondary" data-action="show-master-form" data-kind="settings">แก้จำนวนเงิน</button></div></section>
+      <section class="panel system-plan-panel"><div class="panel-header"><div><h2>ค่าระบบที่จ่ายให้ผู้พัฒนา</h2><p>เลือกใช้งานเพียง 1 รูปแบบ</p></div><span class="badge success">กำลังใช้: ${systemChargeModeName()}</span></div><div class="system-plan-options"><button class="system-plan-option ${state.settings.systemChargeMode === "free" ? "selected" : ""}" type="button" data-action="select-system-charge-mode" data-mode="free"><span class="system-plan-radio"></span><div><strong>ฟรี</strong><small>ไม่มีค่าระบบที่ต้องจ่าย</small></div></button><button class="system-plan-option ${state.settings.systemChargeMode === "per_shuttle" ? "selected" : ""}" type="button" data-action="select-system-charge-mode" data-mode="per_shuttle"><span class="system-plan-radio"></span><div><strong>คิดตามลูกที่เบิก</strong><small>สะสมส่งลูกละ ฿${formatMoney(state.settings.systemFeePerShuttle)}</small></div></button><button class="system-plan-option ${state.settings.systemChargeMode === "monthly" ? "selected" : ""}" type="button" data-action="select-system-charge-mode" data-mode="monthly"><span class="system-plan-radio"></span><div><strong>เหมาจ่ายรายเดือน</strong><small>จ่าย ฿${formatMoney(state.settings.monthlySystemFee)} ต่อเดือน</small></div></button></div><div class="system-plan-footer"><span>ยอดผู้พัฒนาแยกจากค่าลูกของผู้เล่นเสมอ · ค่าลูกหารตามผู้รับผิดชอบ 4 ช่องเท่านั้น</span><button class="button small secondary" data-action="show-master-form" data-kind="settings">แก้จำนวนเงิน</button></div></section>
       <section class="panel"><div class="panel-header"><div><h2>อัตราสมาชิกและค่าเข้า</h2><p>ค่าบริการของชมรม</p></div><button class="button small secondary" data-action="show-master-form" data-kind="settings">แก้ไข</button></div><div class="data-list"><div class="master-court"><div><strong>ค่าเข้าบุคคลภายนอก</strong><small>คิดครั้งเดียวต่อวันที่มาเล่น</small></div><strong class="money">฿${formatMoney(state.settings.guestEntryFee)}</strong></div><div class="master-court"><div><strong>ค่าสมาชิกชมรมรายปี</strong><small>${state.settings.annualMemberFee ? "อัตราปัจจุบัน" : "ยังไม่กำหนด"}</small></div><strong>${state.settings.annualMemberFee ? `฿${formatMoney(state.settings.annualMemberFee)}` : "—"}</strong></div></div></section>
       <section class="panel"><div class="panel-header"><div><h2>ประเภทสมาชิก</h2><p>เงื่อนไขการใช้งานของชมรม</p></div></div><div class="data-list level-guide"><div class="level-item"><span class="level-big">C</span><div><strong>สมาชิกชมรม</strong><small>ชำระสมาชิกเป็นรายปี · ไม่เสียค่าเข้ารายวัน</small></div></div><div class="level-item"><span class="level-big" style="background:#ffe1dc">G</span><div><strong>บุคคลภายนอก</strong><small>เพิ่มค่าเข้า ฿${formatMoney(state.settings.guestEntryFee)} เมื่อเช็คอินครั้งแรกของวัน</small></div></div></div></section>
       <section class="panel"><div class="panel-header"><div><h2>กติกาการเล่น</h2><p>ใช้สื่อสารให้ผู้เล่นทุกคนเข้าใจตรงกัน</p></div></div><div class="data-list"><div class="callout" style="background:#edf7c8;color:#41561e">✓ เช็คอินก่อนดูและลงคิว<br>✓ บุคคลภายนอกเสียค่าเข้า ฿${formatMoney(state.settings.guestEntryFee)} ต่อวัน<br>✓ 1 คิวต้องมีผู้เล่น 4 คน<br>✓ ใครก็ได้สามารถจัดคิวลงสนามและจบเกม<br>✓ ค้างชำระข้ามวันจะถูกระงับสิทธิ์</div></div></section>
@@ -937,7 +953,7 @@ function showMasterForm(kind, key = null) {
   if (kind === "settings") {
     return openDialog(`
       <div class="dialog-header"><div><h2>แก้ไขอัตราค่าบริการ</h2><p>ค่าที่แก้จะใช้กับรายการใหม่ ส่วนรายการเก่ายังคงราคาเดิม</p></div><button class="dialog-close" value="cancel">×</button></div>
-      <div class="dialog-body"><div class="field"><label for="settingSystemChargeMode">วิธีคิดค่าระบบที่หักส่งผู้พัฒนา</label><select id="settingSystemChargeMode"><option value="per_shuttle" ${state.settings.systemChargeMode === "per_shuttle" ? "selected" : ""}>คิดตามจำนวนลูกแบดที่เบิก</option><option value="monthly" ${state.settings.systemChargeMode === "monthly" ? "selected" : ""}>เหมาจ่ายรายเดือน</option></select></div><div class="master-rate-grid"><div class="field"><label for="settingSystemFeePerShuttle">ค่าระบบ / ลูก</label><input id="settingSystemFeePerShuttle" type="number" min="0" step="1" value="${state.settings.systemFeePerShuttle}"></div><div class="field"><label for="settingMonthlySystemFee">ค่าระบบ / เดือน</label><input id="settingMonthlySystemFee" type="number" min="0" step="1" value="${state.settings.monthlySystemFee}"></div><div class="field"><label for="settingGuestFee">ค่าเข้าบุคคลภายนอก / วัน</label><input id="settingGuestFee" type="number" min="0" step="1" value="${state.settings.guestEntryFee}"></div><div class="field"><label for="settingAnnualFee">ค่าสมาชิกรายปี</label><input id="settingAnnualFee" type="number" min="0" step="1" value="${state.settings.annualMemberFee}" placeholder="0 = ยังไม่กำหนด"></div></div><div class="callout">ถ้าเลือก “คิดตามจำนวนลูก” ระบบจะรวมค่าระบบในแต่ละเกมและหาร 4 คน · ถ้าเลือก “เหมารายเดือน” จะไม่บวกค่าระบบในยอดผู้เล่น</div></div>
+      <div class="dialog-body"><div class="field"><label for="settingSystemChargeMode">วิธีคิดค่าระบบที่จ่ายให้ผู้พัฒนา</label><select id="settingSystemChargeMode"><option value="free" ${state.settings.systemChargeMode === "free" ? "selected" : ""}>ฟรี</option><option value="per_shuttle" ${state.settings.systemChargeMode === "per_shuttle" ? "selected" : ""}>คิดตามจำนวนลูกแบดที่เบิก</option><option value="monthly" ${state.settings.systemChargeMode === "monthly" ? "selected" : ""}>เหมาจ่ายรายเดือน</option></select></div><div class="master-rate-grid"><div class="field"><label for="settingSystemFeePerShuttle">ค่าระบบ / ลูก</label><input id="settingSystemFeePerShuttle" type="number" min="0" step="1" value="${state.settings.systemFeePerShuttle}"></div><div class="field"><label for="settingMonthlySystemFee">ค่าระบบ / เดือน</label><input id="settingMonthlySystemFee" type="number" min="0" step="1" value="${state.settings.monthlySystemFee}"></div><div class="field"><label for="settingGuestFee">ค่าเข้าบุคคลภายนอก / วัน</label><input id="settingGuestFee" type="number" min="0" step="1" value="${state.settings.guestEntryFee}"></div><div class="field"><label for="settingAnnualFee">ค่าสมาชิกรายปี</label><input id="settingAnnualFee" type="number" min="0" step="1" value="${state.settings.annualMemberFee}" placeholder="0 = ยังไม่กำหนด"></div></div><div class="callout">ทั้ง 3 รูปแบบไม่บวกค่าระบบเข้าใบเรียกเก็บของผู้เล่น · คิดต่อลูกจะสะสมยอดไว้จ่ายผู้พัฒนาภายหลัง</div></div>
       <div class="dialog-footer"><button class="button secondary" value="cancel">ยกเลิก</button><button class="button" type="button" data-action="save-master" data-kind="settings">บันทึกอัตรา</button></div>`);
   }
 }
@@ -991,7 +1007,7 @@ function saveMaster(kind, key = null) {
       guestEntryFee: Number(dialogContent.querySelector("#settingGuestFee")?.value),
       annualMemberFee: Number(dialogContent.querySelector("#settingAnnualFee")?.value),
     };
-    if (!["per_shuttle", "monthly"].includes(next.systemChargeMode) || [next.systemFeePerShuttle, next.monthlySystemFee, next.guestEntryFee, next.annualMemberFee].some((value) => !Number.isFinite(value) || value < 0)) return showToast("กรุณาเลือกวิธีคิดและกรอกอัตราตั้งแต่ 0 ขึ้นไป");
+    if (!["free", "per_shuttle", "monthly"].includes(next.systemChargeMode) || [next.systemFeePerShuttle, next.monthlySystemFee, next.guestEntryFee, next.annualMemberFee].some((value) => !Number.isFinite(value) || value < 0)) return showToast("กรุณาเลือกวิธีคิดและกรอกอัตราตั้งแต่ 0 ขึ้นไป");
     Object.assign(state.settings, next);
   } else return;
   closeDialog();
@@ -1089,10 +1105,10 @@ function showBallRoundDialog(roundId) {
         <div class="field"><label for="editBallShuttle">ยี่ห้อ / รุ่นลูกแบด</label><select id="editBallShuttle">${state.shuttles.map((item) => `<option value="${item.id}" ${item.id === round.shuttleId ? "selected" : ""}>${shuttleLabel(item)}${item.active ? "" : " · ปิดใช้งาน"}</option>`).join("")}</select></div>
         <div class="field"><label for="editBallCount">จำนวนลูก</label><input id="editBallCount" type="number" min="1" step="1" value="${round.balls}"></div>
         <div class="field"><label for="editBallPrice">ราคาต่อลูก</label><input id="editBallPrice" type="number" min="0" step="0.5" value="${round.ballCost}"></div>
-        <div class="field"><label for="editBallFee">ค่าระบบรวมเกมนี้</label><input id="editBallFee" type="number" min="0" step="0.5" value="${round.fee}"></div>
+        <div class="field"><label for="editBallDeveloperFee">ยอดผู้พัฒนาแยกสำหรับเกมนี้</label><input id="editBallDeveloperFee" type="number" min="0" step="0.5" value="${roundDeveloperFee(round)}"></div>
       </div>
       <div class="field"><label for="editBallCreatedAt">วันและเวลาที่เบิก</label><input id="editBallCreatedAt" type="datetime-local" value="${localDateTimeValue(round.createdAt)}"></div>
-      <div class="callout">แก้ไขรายการนี้แล้ว ยอดรายคนและ Dashboard จะคำนวณใหม่จากข้อมูลล่าสุดทันที</div>
+      <div class="callout">ยอดผู้พัฒนาไม่ถูกรวมในค่าลูกของผู้เล่น · แก้ไขแล้ว Dashboard จะคำนวณยอดสะสมใหม่ทันที</div>
     </div>
     <div class="dialog-footer"><button class="button secondary" value="cancel">ยกเลิก</button><button class="button" type="button" data-action="save-ball-round" data-round="${round.id}">บันทึกการแก้ไข</button></div>`);
 }
@@ -1104,13 +1120,14 @@ function saveBallRound(roundId) {
   const selectedShuttle = shuttle(Number(dialogContent.querySelector("#editBallShuttle")?.value));
   const balls = Number(dialogContent.querySelector("#editBallCount")?.value);
   const ballCost = Number(dialogContent.querySelector("#editBallPrice")?.value);
-  const fee = Number(dialogContent.querySelector("#editBallFee")?.value);
+  const developerFee = Number(dialogContent.querySelector("#editBallDeveloperFee")?.value);
   const createdAt = new Date(dialogContent.querySelector("#editBallCreatedAt")?.value).getTime();
   if (playerIds.length !== 4) return showToast("กรุณาเลือกชื่อให้ครบ 4 ช่อง");
   if (!selectedShuttle) return showToast("กรุณาเลือกลูกแบด");
-  if (!Number.isInteger(balls) || balls < 1 || [ballCost, fee].some((value) => !Number.isFinite(value) || value < 0)) return showToast("กรุณากรอกจำนวนและราคาให้ถูกต้อง");
+  if (!Number.isInteger(balls) || balls < 1 || [ballCost, developerFee].some((value) => !Number.isFinite(value) || value < 0)) return showToast("กรุณากรอกจำนวนและราคาให้ถูกต้อง");
   if (!Number.isFinite(createdAt)) return showToast("กรุณาเลือกวันและเวลา");
-  Object.assign(round, { playerIds, balls, shuttleId: selectedShuttle.id, shuttleName: shuttleLabel(selectedShuttle), ballCost, fee, createdAt });
+  Object.assign(round, { playerIds, balls, shuttleId: selectedShuttle.id, shuttleName: shuttleLabel(selectedShuttle), ballCost, developerFee, createdAt });
+  delete round.fee;
   playerIds.forEach((personId) => { state.payments[personId] = false; });
   closeDialog();
   render();
@@ -1361,10 +1378,10 @@ function handleAction(button) {
   if (action === "confirm-delete-master") deleteMaster(button.dataset.kind, button.dataset.key);
   if (action === "select-system-charge-mode") {
     const mode = button.dataset.mode;
-    if (!["per_shuttle", "monthly"].includes(mode)) return;
+    if (!["free", "per_shuttle", "monthly"].includes(mode)) return;
     state.settings.systemChargeMode = mode;
     render();
-    showToast(mode === "per_shuttle" ? `เปลี่ยนเป็นคิดค่าระบบลูกละ ฿${formatMoney(state.settings.systemFeePerShuttle)}` : `เปลี่ยนเป็นค่าระบบรายเดือน ฿${formatMoney(state.settings.monthlySystemFee)}`);
+    showToast(mode === "free" ? "เปลี่ยนค่าระบบเป็นฟรีแล้ว" : mode === "per_shuttle" ? `เปลี่ยนเป็นสะสมยอดผู้พัฒนาลูกละ ฿${formatMoney(state.settings.systemFeePerShuttle)}` : `เปลี่ยนเป็นค่าระบบรายเดือน ฿${formatMoney(state.settings.monthlySystemFee)}`);
   }
   if (action === "clear-admin-filter") {
     const page = button.dataset.page;
@@ -1546,14 +1563,14 @@ function issueBallRound() {
   const selectedShuttle = shuttle(Number(app.querySelector("#ballShuttle")?.value));
   if (!selectedShuttle?.active) return showToast("กรุณาเลือกยี่ห้อลูกแบดที่เปิดใช้งาน");
   const id = Math.max(0, ...state.ballRounds.map((round) => round.id)) + 1;
-  const fee = systemFeeForRound(balls);
-  state.ballRounds.push({ id, queueId: state.ballDraftQueueId, playerIds: ids, balls, shuttleId: selectedShuttle.id, shuttleName: shuttleLabel(selectedShuttle), ballCost: selectedShuttle.price, fee, createdAt: Date.now() });
+  const developerFee = developerFeeForRound(balls);
+  state.ballRounds.push({ id, queueId: state.ballDraftQueueId, playerIds: ids, balls, shuttleId: selectedShuttle.id, shuttleName: shuttleLabel(selectedShuttle), ballCost: selectedShuttle.price, developerFee, createdAt: Date.now() });
   ids.forEach((personId) => { state.payments[personId] = false; });
   state.ballAdminMode = "list";
   state.ballDraftQueueId = null;
   state.ballDraftPlayerIds = [];
   render();
-  showToast(`บันทึกเกม #${String(id).padStart(2, "0")} · ${shuttleLabel(selectedShuttle)} · ช่องละ ฿${formatMoney((balls * selectedShuttle.price + fee) / 4)}`);
+  showToast(`บันทึกเกม #${String(id).padStart(2, "0")} · ${shuttleLabel(selectedShuttle)} · ค่าลูกช่องละ ฿${formatMoney(balls * selectedShuttle.price / 4)}`);
 }
 
 function recordPurchase() {
@@ -1659,9 +1676,9 @@ document.addEventListener("change", (event) => {
     const balls = Number(app.querySelector("#ballCount")?.value || 1);
     const selectedShuttle = shuttle(Number(app.querySelector("#ballShuttle")?.value));
     if (!selectedShuttle) return;
-    const fee = systemFeeForRound(balls);
+    const developerFee = developerFeeForRound(balls);
     const preview = document.querySelector("#costPreview");
-    if (preview) preview.innerHTML = `<div class="cost-line"><span>${shuttleLabel(selectedShuttle)} × ${balls}</span><strong class="money">฿${formatMoney(balls * selectedShuttle.price)}</strong></div><div class="cost-line"><span>ค่าระบบ · ${systemFeeLabel()}</span><strong class="money">฿${formatMoney(fee)}</strong></div><div class="cost-line total"><span>รวม / หาร 4 คน</span><strong class="money">฿${formatMoney((balls * selectedShuttle.price + fee) / 4)} ต่อคน</strong></div>`;
+    if (preview) preview.innerHTML = `<div class="cost-line"><span>${shuttleLabel(selectedShuttle)} × ${balls}</span><strong class="money">฿${formatMoney(balls * selectedShuttle.price)}</strong></div><div class="cost-line"><span>ยอดผู้พัฒนาแยก · ${systemFeeLabel()}</span><strong class="money">฿${formatMoney(developerFee)}</strong></div><div class="cost-line total"><span>ค่าลูก / หาร 4 คน</span><strong class="money">฿${formatMoney(balls * selectedShuttle.price / 4)} ต่อคน</strong></div>`;
   }
   if (event.target.id === "shopProduct" || event.target.id === "shopQuantity") {
     const item = product(Number(app.querySelector("#shopProduct")?.value));

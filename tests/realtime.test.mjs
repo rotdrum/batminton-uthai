@@ -72,7 +72,7 @@ test("serves the app, persists state, and broadcasts updates", async () => {
     const health = await (await fetch(`${baseUrl}/api/health`)).json();
     assert.equal(health.ok, true);
     assert.equal(health.persisted, true);
-    assert.equal(health.schemaVersion, 1);
+    assert.equal(health.schemaVersion, 2);
     const adminPage = await (await fetch(`${baseUrl}/admin/index.html`)).text();
     assert.match(adminPage, /data-realtime-status/);
 
@@ -108,7 +108,7 @@ test("serves the app, persists state, and broadcasts updates", async () => {
     assert.equal((await updateForSecond).data.state.members[0].checkedIn, false);
 
     const stored = JSON.parse(await readFile(dataFile, "utf8"));
-    assert.equal(stored.schemaVersion, 1);
+    assert.equal(stored.schemaVersion, 2);
     assert.equal(stored.revision, 2);
     assert.equal(stored.snapshot.state.members[0].checkedIn, false);
     second.socket.close();
@@ -120,12 +120,16 @@ test("serves the app, persists state, and broadcasts updates", async () => {
   }
 });
 
-test("migrates members without a phone number", () => {
+test("migrates members and separates legacy developer fees", () => {
   const legacy = structuredClone(initialSnapshot);
   delete legacy.state.members[0].phone;
+  legacy.state.ballRounds = [{ id: 1, balls: 2, ballCost: 90, fee: 10, playerIds: [1, 1, 1, 1] }];
   const migrated = migrateSnapshot(legacy, 0);
-  assert.equal(migrated.schemaVersion, 1);
+  assert.equal(migrated.schemaVersion, 2);
   assert.equal(migrated.snapshot.state.members[0].phone, "");
+  assert.equal(migrated.snapshot.state.settings.systemChargeMode, "free");
+  assert.equal(migrated.snapshot.state.ballRounds[0].developerFee, 10);
+  assert.equal("fee" in migrated.snapshot.state.ballRounds[0], false);
 });
 
 test("resets transactions while preserving members and master data", () => {

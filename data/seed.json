@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "snapshot": {
     "levels": {
       "BG": {
@@ -42,7 +42,7 @@
       "settings": {
         "guestEntryFee": 20,
         "annualMemberFee": 0,
-        "systemChargeMode": "per_shuttle",
+        "systemChargeMode": "free",
         "systemFeePerShuttle": 5,
         "monthlySystemFee": 1500
       },

@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export function isValidSnapshot(snapshot) {
   if (!snapshot || typeof snapshot !== "object" || !snapshot.state || typeof snapshot.state !== "object") return false;
@@ -24,12 +24,24 @@ export function migrateSnapshot(snapshot, fromVersion = 0) {
     migrated.state.settings = {
       guestEntryFee: 20,
       annualMemberFee: 0,
-      systemChargeMode: "per_shuttle",
+      systemChargeMode: "free",
       systemFeePerShuttle: 5,
       monthlySystemFee: 1500,
       ...migrated.state.settings,
     };
     schemaVersion = 1;
+  }
+
+  if (schemaVersion < 2) {
+    migrated.state.settings.systemChargeMode = "free";
+    migrated.state.ballRounds = migrated.state.ballRounds.map((round) => {
+      const { fee, ...rest } = round;
+      return {
+        ...rest,
+        developerFee: Number(round.developerFee ?? fee) || 0,
+      };
+    });
+    schemaVersion = 2;
   }
 
   return { snapshot: migrated, schemaVersion };
