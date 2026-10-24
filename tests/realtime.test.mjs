@@ -6,7 +6,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
 import { createAppServer } from "../server/server.mjs";
-import { migrateSnapshot } from "../server/state-store.mjs";
+import { migrateSnapshot, resetTransactionalState } from "../server/state-store.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -126,4 +126,30 @@ test("migrates members without a phone number", () => {
   const migrated = migrateSnapshot(legacy, 0);
   assert.equal(migrated.schemaVersion, 1);
   assert.equal(migrated.snapshot.state.members[0].phone, "");
+});
+
+test("resets transactions while preserving members and master data", () => {
+  const populated = structuredClone(initialSnapshot);
+  populated.state.members[0].visitedToday = true;
+  populated.state.members[0].previousDue = 125;
+  populated.state.queues = [{ id: 1, playerIds: [1], status: "waiting" }];
+  populated.state.ballRounds = [{ id: 1, playerIds: [1] }];
+  populated.state.purchases = [{ id: 1, personId: 1 }];
+  populated.state.payments = { 1: false };
+  populated.state.paymentProofs = { 1: { submittedAt: Date.now() } };
+  populated.state.analytics = { revenueBeforeToday: { month: 500, year: 1000 }, lastSixDays: [1, 2, 3, 4, 5, 6] };
+
+  const reset = resetTransactionalState(populated);
+  assert.equal(reset.state.members.length, 1);
+  assert.equal(reset.state.members[0].name, "สมาชิกไม่มีเบอร์");
+  assert.equal(reset.state.members[0].checkedIn, false);
+  assert.equal(reset.state.members[0].visitedToday, false);
+  assert.equal(reset.state.members[0].previousDue, 0);
+  assert.equal(reset.state.courts.length, 1);
+  assert.deepEqual(reset.state.queues, []);
+  assert.deepEqual(reset.state.ballRounds, []);
+  assert.deepEqual(reset.state.purchases, []);
+  assert.deepEqual(reset.state.payments, {});
+  assert.deepEqual(reset.state.paymentProofs, {});
+  assert.equal(reset.state.analytics.revenueBeforeToday.year, 0);
 });

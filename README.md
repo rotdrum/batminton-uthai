@@ -40,6 +40,7 @@ Server เริ่มต้นที่ `http://127.0.0.1:8080` แล้วเ
 
 - บอร์ดทีวี Responsive/Adaptive แสดงคิวแบบ 2 คอลัมน์ × 5 แถวเมื่อมีไม่เกิน 10 คิว และ 2 คอลัมน์ × 10 แถวเมื่อมี 20 คิว
 - ผู้เล่นค้นหาและเลือกตัวเองจาก Master ก่อนใช้งาน สมาชิกใหม่ต้องให้ Admin เพิ่มชื่อ
+- Admin เพิ่ม แก้ไข และลบสมาชิกได้ โดยระบบจะกันการลบคนที่ยังมีคิว ธุรกรรม หรือยอดเงินอ้างอิงอยู่
 - เบอร์โทรสมาชิกเป็นข้อมูลไม่บังคับ
 - เช็คอินตัวเองหรือเพื่อน และรวมผู้เล่นว่าง 4 คนลงคิว
 - ทุกคนช่วยจัดคิวลงสนาม คืนทีมกลับไปรอคิว จบเกม และเช็คเอาท์คนกลับบ้านได้
@@ -68,6 +69,7 @@ bat-uthai/
 ├── pnpm-lock.yaml             # ล็อกเวอร์ชัน dependency
 ├── server/server.mjs          # HTTP API, Static Server, WebSocket และ persistence
 ├── server/state-store.mjs     # โหลด Seed, รัน Migration และเขียน State แบบ atomic
+├── server/reset-transactions.mjs # ล้างข้อมูลทดสอบโดยเก็บสมาชิกและ Master Data
 ├── tests/realtime.test.mjs    # ทดสอบ Backend และการ Broadcast
 ├── data/seed.json             # Master Data เริ่มต้นที่ commit ไปกับระบบ
 ├── data/state.json            # ข้อมูลใช้งานจริง สร้างตอนรันและไม่ commit
@@ -93,6 +95,25 @@ bat-uthai/
 - การเขียนไฟล์ใช้ไฟล์ชั่วคราวแล้ว Rename เพื่อลดความเสี่ยงไฟล์เสียกลางทาง
 
 หากต้องการเริ่มข้อมูลใหม่ ให้หยุด Server สำรอง `data/state.json` ไว้ก่อน แล้วค่อยลบไฟล์ดังกล่าว เมื่อเปิด Server อีกครั้งระบบจะสร้างข้อมูลจาก Seed
+
+### ล้างเฉพาะ Transaction สำหรับทดสอบ
+
+คำสั่งนี้เก็บสมาชิก สนาม ระดับมือ ลูกแบด สินค้า และค่าตั้งค่าไว้ แต่ล้างคิว เกมเบิกลูก รายการซื้อ การชำระ หลักฐาน ยอดค้าง และสถานะเช็คอิน ระบบสร้างไฟล์สำรอง `data/state.json.backup-*` ให้อัตโนมัติ
+
+ต้องหยุด Server ก่อนรัน เพื่อไม่ให้ State เก่าในหน่วยความจำเขียนทับข้อมูลที่เพิ่งล้าง:
+
+```bash
+pm2 stop bat-uthai
+npm run reset:transactions
+pm2 start bat-uthai
+pm2 save
+```
+
+ถ้า Server ใช้ไฟล์ State คนละตำแหน่ง ให้ส่ง path เดียวกับตอนเปิด Server:
+
+```bash
+DATA_FILE=/var/lib/bat-uthai/state.json npm run reset:transactions
+```
 
 ### ความปลอดภัยของข้อมูลใน Git
 

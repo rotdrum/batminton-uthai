@@ -536,7 +536,7 @@ main:has(.tv-board) { width: 100%; max-width: 1800px; padding-top: 18px; padding
 .data-list { padding: 0 16px 16px; }
 .data-row { display: grid; grid-template-columns: minmax(0, 1.4fr) .7fr .7fr auto; gap: 10px; align-items: center; padding: 11px 4px; border-top: 1px solid #ecece6; font-size: 13px; }
 .data-row.head { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; border: 0; }
-.data-row.member-row { grid-template-columns: minmax(190px, 1.2fr) minmax(130px, .8fr) .45fr .65fr auto; }
+.data-row.member-row { grid-template-columns: minmax(180px, 1.2fr) minmax(120px, .8fr) .4fr .65fr auto auto; }
 .data-row.blocked-member { margin-inline: -8px; padding-inline: 12px; border: 1px solid #f3c5ba; border-radius: 13px; background: #fff3f0; }
 .blocked-member .person-cell strong { color: #a6422b; }
 .blocked-member .avatar { color: #9c3f2d; background: #ffd8cf; }
@@ -786,7 +786,7 @@ dialog::backdrop { background: rgba(10, 25, 19, .58); backdrop-filter: blur(5px)
   .data-row { grid-template-columns: minmax(0, 1fr) .5fr auto; }
   .data-row > :nth-child(3) { display: none; }
   .data-row.member-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .data-row.member-row > :nth-child(n+3) { display: none; }
+  .data-row.member-row > :nth-child(n+2):nth-child(-n+5) { display: none; }
   .mobile-nav {
     display: grid;
     grid-template-columns: repeat(3, 1fr);

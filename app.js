@@ -881,8 +881,8 @@ function peopleAdmin() {
   return `
     <div class="page-heading"><div><p class="eyebrow">MASTER สมาชิก</p><h1>สมาชิกทั้งหมด</h1><p>จัดการประเภทสมาชิก ระดับมือ และสิทธิ์การลงเล่น</p></div><button class="button" data-action="new-member">＋ เพิ่มสมาชิก</button></div>
     <section class="panel"><div class="panel-header"><div><h2>${people.length} / ${state.members.length} สมาชิก</h2><p>${checkedInMembers().length} คนอยู่ในโรงยิมตอนนี้</p></div><div class="dashboard-heading-actions"><button class="button secondary" data-action="show-checkout-picker">↗ เช็คเอาท์กลับบ้าน</button><button class="button lime checkin-primary" data-action="checkin">✓ เช็คอินสมาชิก</button></div></div>${adminFilterBar("people", { showDate: false, sortOptions: [["name_asc", "ชื่อ ก–ฮ"], ["checked_in", "เช็คอินก่อน"], ["debt_desc", "ยอดค้างสูงสุด"], ["level", "ระดับมือ"]] })}<div class="data-list">
-      <div class="data-row head member-row"><span>ชื่อผู้เล่น</span><span>ประเภทสมาชิก</span><span>ระดับมือ</span><span>สถานะวันนี้</span><span>สิทธิ์พรุ่งนี้</span></div>
-      ${people.map((person) => `<div class="data-row member-row ${person.previousDue ? "blocked-member" : ""}"><div class="person-cell">${initialsAvatar(person)}<div><strong>${person.name}</strong><small>${person.phone || "ไม่ระบุเบอร์โทร"}</small></div></div><div class="membership-cell"><button class="badge ${person.membership === "club" ? "club" : "guest"}" data-action="toggle-membership" data-person="${person.id}">${membershipName(person)}</button><small>${membershipDetail(person)}</small></div><button class="badge blue" data-action="cycle-level" data-person="${person.id}">มือ ${person.level}</button><div class="member-presence"><span class="badge ${person.checkedIn ? "success" : ""}">${person.checkedIn ? "เช็คอินแล้ว" : "ยังไม่มา"}</span>${person.checkedIn ? `<button class="button small checkout-button" data-action="checkout" data-person="${person.id}">↗ กลับบ้าน</button>` : ""}</div>${person.previousDue ? `<button class="badge danger overdue-action" data-action="clear-overdue" data-person="${person.id}" title="กดเมื่อรับชำระยอดค้างแล้ว">ระงับสิทธิ์ · ค้าง ฿${formatMoney(person.previousDue)}</button>` : `<span class="badge success">เล่นได้</span>`}</div>`).join("") || `<div class="empty-state">ไม่พบสมาชิกตามคำค้น</div>`}
+      <div class="data-row head member-row"><span>ชื่อผู้เล่น</span><span>ประเภทสมาชิก</span><span>ระดับมือ</span><span>สถานะวันนี้</span><span>สิทธิ์พรุ่งนี้</span><span>จัดการ</span></div>
+      ${people.map((person) => `<div class="data-row member-row ${person.previousDue ? "blocked-member" : ""}"><div class="person-cell">${initialsAvatar(person)}<div><strong>${person.name}</strong><small>${person.phone || "ไม่ระบุเบอร์โทร"}</small></div></div><div class="membership-cell"><button class="badge ${person.membership === "club" ? "club" : "guest"}" data-action="toggle-membership" data-person="${person.id}">${membershipName(person)}</button><small>${membershipDetail(person)}</small></div><button class="badge blue" data-action="cycle-level" data-person="${person.id}">มือ ${person.level}</button><div class="member-presence"><span class="badge ${person.checkedIn ? "success" : ""}">${person.checkedIn ? "เช็คอินแล้ว" : "ยังไม่มา"}</span>${person.checkedIn ? `<button class="button small checkout-button" data-action="checkout" data-person="${person.id}">↗ กลับบ้าน</button>` : ""}</div>${person.previousDue ? `<button class="badge danger overdue-action" data-action="clear-overdue" data-person="${person.id}" title="กดเมื่อรับชำระยอดค้างแล้ว">ระงับสิทธิ์ · ค้าง ฿${formatMoney(person.previousDue)}</button>` : `<span class="badge success">เล่นได้</span>`}<div class="table-actions"><button class="button small secondary" data-action="edit-member" data-person="${person.id}">แก้ไข</button><button class="button small coral" data-action="show-delete-member" data-person="${person.id}">ลบ</button></div></div>`).join("") || `<div class="empty-state">ไม่พบสมาชิกตามคำค้น</div>`}
     </div></section>`;
 }
 
@@ -1055,11 +1055,27 @@ function showCheckinDialog() {
     <div class="dialog-footer"><button class="button secondary" value="cancel">ยกเลิก</button><button class="button" type="button" data-action="confirm-checkin">ยืนยันเช็คอิน</button></div>`);
 }
 
-function showMemberDialog() {
+function showMemberDialog(personId = null) {
+  const person = member(personId);
+  const editing = Boolean(person);
   openDialog(`
-    <div class="dialog-header"><div><h2>เพิ่มสมาชิกใหม่</h2><p>เฉพาะแอดมิน · เพิ่มเข้า Master ก่อน แล้วให้ผู้เล่นเลือกเช็คอินเอง</p></div><button class="dialog-close" value="cancel">×</button></div>
-    <div class="dialog-body"><div class="field"><label for="newName">ชื่อที่ใช้เรียก</label><input id="newName" placeholder="เช่น เต้ เมืองอุทัย" autocomplete="name"></div><div class="field"><label for="newPhone">เบอร์โทรศัพท์ <span class="optional-label">ไม่บังคับ</span></label><input id="newPhone" placeholder="เว้นว่างได้" inputmode="tel"></div><div class="field"><label for="newMembership">ประเภทสมาชิก</label><select id="newMembership"><option value="guest">บุคคลภายนอก · ค่าเข้า ฿${state.settings.guestEntryFee}/วัน</option><option value="club">สมาชิกชมรม · ชำระรายปี</option></select></div><div class="field"><label for="newLevel">ระดับมือเริ่มต้น</label><select id="newLevel">${Object.entries(LEVELS).map(([code, item]) => `<option value="${code}">${code} · ${item.label}</option>`).join("")}</select></div></div>
-    <div class="dialog-footer"><button class="button secondary" value="cancel">ยกเลิก</button><button class="button" type="button" data-action="save-member">เพิ่มเข้ารายชื่อ</button></div>`);
+    <div class="dialog-header"><div><h2>${editing ? "แก้ไขสมาชิก" : "เพิ่มสมาชิกใหม่"}</h2><p>เฉพาะแอดมิน · จัดการชื่อ เบอร์โทร ประเภทสมาชิก และระดับมือ</p></div><button class="dialog-close" value="cancel" aria-label="ปิด">×</button></div>
+    <div class="dialog-body"><div class="field"><label for="newName">ชื่อที่ใช้เรียก</label><input id="newName" placeholder="เช่น เต้ เมืองอุทัย" autocomplete="name"></div><div class="field"><label for="newPhone">เบอร์โทรศัพท์ <span class="optional-label">ไม่บังคับ</span></label><input id="newPhone" placeholder="เว้นว่างได้" inputmode="tel"></div><div class="field"><label for="newMembership">ประเภทสมาชิก</label><select id="newMembership"><option value="guest" ${person?.membership === "guest" ? "selected" : ""}>บุคคลภายนอก · ค่าเข้า ฿${state.settings.guestEntryFee}/วัน</option><option value="club" ${person?.membership === "club" ? "selected" : ""}>สมาชิกชมรม · ชำระรายปี</option></select></div><div class="field"><label for="newLevel">ระดับมือ</label><select id="newLevel">${Object.entries(LEVELS).map(([code, item]) => `<option value="${code}" ${person?.level === code ? "selected" : ""}>${code} · ${item.label}</option>`).join("")}</select></div></div>
+    <div class="dialog-footer"><button class="button secondary" value="cancel">ยกเลิก</button><button class="button" type="button" data-action="save-member" data-person="${person?.id || ""}">${editing ? "บันทึกการแก้ไข" : "เพิ่มเข้ารายชื่อ"}</button></div>`);
+  if (person) {
+    dialogContent.querySelector("#newName").value = person.name;
+    dialogContent.querySelector("#newPhone").value = person.phone || "";
+  }
+}
+
+function showDeleteMemberDialog(personId) {
+  const person = member(personId);
+  if (!person) return showToast("ไม่พบสมาชิกที่ต้องการลบ");
+  const usage = memberUsage(person);
+  openDialog(`
+    <div class="dialog-header"><div><h2>ลบ ${person.name}?</h2><p>ลบได้เมื่อไม่มีคิว ประวัติเบิกลูก ซื้อของ หรือยอดเงินผูกอยู่</p></div><button class="dialog-close" value="cancel" aria-label="ปิด">×</button></div>
+    <div class="dialog-body"><div class="callout" style="background:${usage.length ? "#fff0d0;color:#8b610d" : "#fff0ec;color:#8d4938"}">${usage.length ? `ยังลบไม่ได้ · ${usage.join(" · ")}` : "การลบสมาชิกย้อนกลับไม่ได้ กรุณาตรวจสอบชื่อก่อนยืนยัน"}</div></div>
+    <div class="dialog-footer"><button class="button secondary" value="cancel">ยกเลิก</button><button class="button coral" type="button" data-action="confirm-delete-member" data-person="${person.id}" ${usage.length ? "disabled" : ""}>ยืนยันลบสมาชิก</button></div>`);
 }
 
 function showBallRoundDialog(roundId) {
@@ -1263,6 +1279,9 @@ function handleAction(button) {
     if (state.view !== "admin") return showToast("สมาชิกใหม่กรุณาแจ้งแอดมินเพิ่มรายชื่อก่อน");
     showMemberDialog();
   }
+  if (action === "edit-member") showMemberDialog(Number(button.dataset.person));
+  if (action === "show-delete-member") showDeleteMemberDialog(Number(button.dataset.person));
+  if (action === "confirm-delete-member") deleteMember(Number(button.dataset.person));
   if (action === "open-queue") showQueueDialog();
   if (action === "show-checkout-picker") showCheckoutPickerDialog();
   if (action === "checkout-selected") {
@@ -1299,7 +1318,7 @@ function handleAction(button) {
     });
     closeDialog(); render(); showToast(`เช็คอิน ${ids.length} คน${newGuestFees ? ` · เพิ่มค่าเข้า ฿${newGuestFees * state.settings.guestEntryFee}` : ""}`);
   }
-  if (action === "save-member") saveNewMember();
+  if (action === "save-member") saveMember(Number(button.dataset.person) || null);
   if (action === "set-ball-mode") {
     state.ballAdminMode = button.dataset.mode === "add" ? "add" : "list";
     state.ballDraftQueueId = null;
@@ -1477,17 +1496,46 @@ function requeuePlayingQueue(queueId) {
   showToast(`${queue.code} กลับไปต่อท้ายคิวแล้ว · สนาม ${courtId} ว่าง`);
 }
 
-function saveNewMember() {
-  if (state.view !== "admin") return showToast("เฉพาะแอดมินเท่านั้นที่เพิ่มสมาชิกใหม่ได้");
+function saveMember(personId = null) {
+  if (state.view !== "admin") return showToast("เฉพาะแอดมินเท่านั้นที่จัดการสมาชิกได้");
   const name = dialogContent.querySelector("#newName").value.trim();
   const phone = dialogContent.querySelector("#newPhone").value.trim();
   const level = dialogContent.querySelector("#newLevel").value;
   const membership = dialogContent.querySelector("#newMembership").value;
   if (!name) return showToast("กรุณากรอกชื่อสมาชิก");
-  const id = Math.max(0, ...state.members.map((person) => person.id)) + 1;
+  if (!LEVELS[level] || !["guest", "club"].includes(membership)) return showToast("กรุณาเลือกประเภทสมาชิกและระดับมือให้ถูกต้อง");
   const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+  if (personId) {
+    const person = member(personId);
+    if (!person) return showToast("ไม่พบสมาชิกที่ต้องการแก้ไข");
+    Object.assign(person, { name, short: name.split(/\s+/)[0], initials, level, membership, phone });
+    closeDialog(); render(); showToast(`บันทึกข้อมูล ${name} แล้ว`);
+    return;
+  }
+  const id = Math.max(0, ...state.members.map((person) => person.id)) + 1;
   state.members.push({ id, name, short: name.split(/\s+/)[0], initials, level, membership, checkedIn: false, visitedToday: false, phone, previousDue: 0 });
   closeDialog(); render(); showToast(`เพิ่ม ${name} แล้ว · ให้ผู้เล่นเลือกชื่อเพื่อเช็คอินเอง`);
+}
+
+function memberUsage(person) {
+  const usage = [];
+  if (person.checkedIn) usage.push("ยังเช็คอินอยู่");
+  if (state.queues.some((queue) => queue.playerIds.includes(person.id))) usage.push("มีประวัติคิว");
+  if (state.ballRounds.some((round) => round.playerIds.includes(person.id))) usage.push("มีประวัติเบิกลูก");
+  if (state.purchases.some((purchase) => purchase.personId === person.id)) usage.push("มีประวัติซื้อของ");
+  if (Object.hasOwn(state.payments, person.id) || Object.hasOwn(state.paymentProofs, person.id) || person.previousDue > 0) usage.push("มีข้อมูลการเงิน");
+  return usage;
+}
+
+function deleteMember(personId) {
+  const person = member(personId);
+  if (!person) return showToast("ไม่พบสมาชิกที่ต้องการลบ");
+  const usage = memberUsage(person);
+  if (usage.length) return showToast(`ยังลบ ${person.short} ไม่ได้ · ${usage.join(" · ")}`);
+  state.members = state.members.filter((item) => item.id !== personId);
+  state.selectedPlayers = state.selectedPlayers.filter((id) => id !== personId);
+  if (state.currentPlayerId === personId) state.currentPlayerId = null;
+  closeDialog(); render(); showToast(`ลบ ${person.name} แล้ว`);
 }
 
 function issueBallRound() {

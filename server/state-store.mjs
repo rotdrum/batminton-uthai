@@ -35,6 +35,26 @@ export function migrateSnapshot(snapshot, fromVersion = 0) {
   return { snapshot: migrated, schemaVersion };
 }
 
+export function resetTransactionalState(snapshot) {
+  const reset = structuredClone(snapshot);
+  reset.state.members = reset.state.members.map((member) => ({
+    ...member,
+    checkedIn: false,
+    visitedToday: false,
+    previousDue: 0,
+  }));
+  reset.state.queues = [];
+  reset.state.ballRounds = [];
+  reset.state.purchases = [];
+  reset.state.payments = {};
+  reset.state.paymentProofs = {};
+  reset.state.analytics = {
+    revenueBeforeToday: { month: 0, year: 0 },
+    lastSixDays: [0, 0, 0, 0, 0, 0],
+  };
+  return reset;
+}
+
 export async function loadState({ dataFile, seedFile }) {
   try {
     const stored = JSON.parse(await readFile(dataFile, "utf8"));
